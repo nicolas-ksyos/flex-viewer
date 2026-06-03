@@ -3,7 +3,6 @@ import {
 	Alert,
 	Badge,
 	Box,
-	Button,
 	Heading,
 	IconButton,
 	Spinner,
@@ -197,30 +196,6 @@ export function App() {
 						color={connected ? "green" : "red"}
 						size="small"
 					/>
-					{/* Clone button — only in view mode when a seed is loaded */}
-					{currentWorkflow && !isEditMode && (
-						<Button
-							variant="outline"
-							color="neutral"
-							size="small"
-							onClick={() => setShowCloneModal(true)}
-						>
-							Clone
-						</Button>
-					)}
-					{/* Edit / View mode toggle */}
-					{currentWorkflow && (
-						<Button
-							variant={isEditMode ? "solid" : "outline"}
-							color={isEditMode ? "primary" : "neutral"}
-							size="small"
-							onClick={() =>
-								isEditMode ? handleExitEditMode() : enterEditMode()
-							}
-						>
-							{isEditMode ? "View mode" : "Edit"}
-						</Button>
-					)}
 					<IconButton
 						icon="settings"
 						labelText="Config"
@@ -312,6 +287,11 @@ export function App() {
 									onInfoFieldChange={(step, field, value) =>
 										recordFieldChange(step, field, value)
 									}
+									onEdit={() => {
+										/* already in edit mode, no-op */
+									}}
+									onClone={() => setShowCloneModal(true)}
+									isEditMode={isEditMode}
 								/>
 
 								{/* Always-visible toggle — lives outside the sidebar so overflow:hidden never clips it */}
@@ -368,26 +348,42 @@ export function App() {
 							</Box>
 						) : (
 							/* ── View mode ─────────────────────────────────── */
-							<>
+							<Box flex={1} position="relative" style={{ overflow: "hidden" }}>
 								{currentWorkflow && (
-									<CanvasPane workflow={currentWorkflow.workflow} mode="view" />
+									<CanvasPane
+										workflow={currentWorkflow.workflow}
+										mode="view"
+										onEdit={() => enterEditMode()}
+										onClone={() => setShowCloneModal(true)}
+										isEditMode={isEditMode}
+									/>
 								)}
-								{parseResult.parsedAt && (
-									<Text
-										size="xs"
-										color="subtle"
-										style={{
-											padding: "4px 24px",
-											textAlign: "right",
-											flexShrink: 0,
-										}}
-									>
-										Last parsed:{" "}
-										{new Date(parseResult.parsedAt).toLocaleTimeString()}
-									</Text>
-								)}
-								<DiagnosticsPanel diagnostics={parseResult.diagnostics} />
-							</>
+								{/* Bottom-left status bar — overlaid on canvas */}
+								<div
+									style={{
+										position: "absolute",
+										bottom: 8,
+										left: 8,
+										zIndex: 10,
+										display: "flex",
+										alignItems: "center",
+										gap: 8,
+										background: "rgba(255,255,255,0.88)",
+										backdropFilter: "blur(4px)",
+										borderRadius: 6,
+										padding: "2px 8px 2px 4px",
+										border: "1px solid rgba(0,0,0,0.06)",
+									}}
+								>
+									<DiagnosticsPanel diagnostics={parseResult.diagnostics} />
+									{parseResult.parsedAt && (
+										<Text size="xs" color="subtle">
+											Last parsed:{" "}
+											{new Date(parseResult.parsedAt).toLocaleTimeString()}
+										</Text>
+									)}
+								</div>
+							</Box>
 						)}
 					</>
 				)}
@@ -399,6 +395,7 @@ export function App() {
 					sourceFileName={selectedSeed}
 					onClone={handleClone}
 					onCancel={() => setShowCloneModal(false)}
+					pendingChangesCount={pendingChanges.length}
 				/>
 			)}
 		</>

@@ -50,6 +50,12 @@ interface CanvasToolbarProps {
 	onFitToScreen: () => void;
 	showLegend?: boolean;
 	onToggleLegend?: () => void;
+	/** Called when the Edit button is clicked (no-op when isEditMode is true). */
+	onEdit?: () => void;
+	/** Called when the Clone button is clicked. */
+	onClone?: () => void;
+	/** When true the Edit button is muted and non-clickable. */
+	isEditMode?: boolean;
 }
 
 const toolbarBtnStyle: React.CSSProperties = {
@@ -79,6 +85,9 @@ export function CanvasToolbar({
 	onFitToScreen,
 	showLegend,
 	onToggleLegend,
+	onEdit,
+	onClone,
+	isEditMode,
 }: CanvasToolbarProps) {
 	const canZoomOut = zoomLevel > MIN_ZOOM;
 	const canZoomIn = zoomLevel < MAX_ZOOM;
@@ -101,7 +110,100 @@ export function CanvasToolbar({
 				userSelect: "none",
 			}}
 		>
-			{/* Legend toggle — leftmost */}
+			{/* Edit + Clone buttons — leftmost */}
+			{(onEdit || onClone) && (
+				<>
+					{onEdit && (
+						<button
+							onClick={!isEditMode ? onEdit : undefined}
+							title={isEditMode ? "Currently in edit mode" : "Edit workflow"}
+							style={{
+								...toolbarBtnStyle,
+								display: "flex",
+								alignItems: "center",
+								gap: 4,
+								opacity: isEditMode ? 0.4 : 1,
+								cursor: isEditMode ? "default" : "pointer",
+								padding: "4px 8px",
+							}}
+						>
+							{/* Pencil icon */}
+							<svg
+								width="12"
+								height="12"
+								viewBox="0 0 12 12"
+								fill="none"
+								style={{ display: "block", flexShrink: 0 }}
+							>
+								<path
+									d="M8.5 1.5l2 2L3 11H1V9L8.5 1.5z"
+									stroke="currentColor"
+									strokeWidth="1.2"
+									strokeLinejoin="round"
+									fill="none"
+								/>
+								<path d="M7 3l2 2" stroke="currentColor" strokeWidth="1.2" />
+							</svg>
+							<span style={{ fontSize: 12 }}>Edit</span>
+						</button>
+					)}
+					{onClone && (
+						<button
+							onClick={onClone}
+							title="Clone seed file"
+							style={{
+								...toolbarBtnStyle,
+								display: "flex",
+								alignItems: "center",
+								gap: 4,
+								padding: "4px 8px",
+							}}
+						>
+							{/* Copy/clone icon */}
+							<svg
+								width="12"
+								height="12"
+								viewBox="0 0 12 12"
+								fill="none"
+								style={{ display: "block", flexShrink: 0 }}
+							>
+								<rect
+									x="3.5"
+									y="0.5"
+									width="7"
+									height="8.5"
+									rx="1"
+									stroke="currentColor"
+									strokeWidth="1.2"
+									fill="none"
+								/>
+								<rect
+									x="1"
+									y="3"
+									width="7"
+									height="8.5"
+									rx="1"
+									stroke="currentColor"
+									strokeWidth="1.2"
+									fill="white"
+								/>
+							</svg>
+							<span style={{ fontSize: 12 }}>Clone</span>
+						</button>
+					)}
+					<div
+						style={{
+							width: 1,
+							height: 16,
+							background: "#e5e7eb",
+							margin: "0 4px",
+							flexShrink: 0,
+						}}
+					/>
+				</>
+			)}
+
+			{/* Legend toggle */}
 			{onToggleLegend && (
 				<>
 					<button

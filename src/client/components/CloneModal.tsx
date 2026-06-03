@@ -4,12 +4,14 @@ interface CloneModalProps {
 	sourceFileName: string;
 	onClone: (newFileName: string) => Promise<void>;
 	onCancel: () => void;
+	pendingChangesCount?: number; // number of steps with unsaved changes
 }
 
 export function CloneModal({
 	sourceFileName,
 	onClone,
 	onCancel,
+	pendingChangesCount,
 }: CloneModalProps) {
 	const [newName, setNewName] = useState(sourceFileName);
 	const [loading, setLoading] = useState(false);
@@ -102,6 +104,33 @@ export function CloneModal({
 						color: "#111827",
 					}}
 				/>
+
+				{pendingChangesCount !== undefined && pendingChangesCount > 0 && (
+					<div
+						style={{
+							marginTop: 10,
+							padding: "8px 12px",
+							background: "#fffbeb",
+							border: "1px solid #fde68a",
+							borderRadius: 6,
+							display: "flex",
+							gap: 8,
+							alignItems: "flex-start",
+						}}
+					>
+						<span style={{ fontSize: 16, lineHeight: 1.2, flexShrink: 0 }}>
+							⚠️
+						</span>
+						<span style={{ fontSize: 13, color: "#92400e", lineHeight: 1.4 }}>
+							You have{" "}
+							<strong>
+								{pendingChangesCount} unsaved change
+								{pendingChangesCount !== 1 ? "s" : ""}
+							</strong>
+							. These will be transferred to the clone.
+						</span>
+					</div>
+				)}
 
 				{error && (
 					<p

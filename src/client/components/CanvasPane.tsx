@@ -42,6 +42,10 @@ export interface CanvasPaneProps {
 		field: keyof EditableStepFields,
 		value: string | number | null,
 	) => void;
+	// Toolbar action callbacks:
+	onEdit?: () => void;
+	onClone?: () => void;
+	isEditMode?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -71,6 +75,9 @@ export function CanvasPane({
 	highlightedStepId,
 	onBlockMove,
 	onInfoFieldChange,
+	onEdit,
+	onClone,
+	isEditMode,
 }: CanvasPaneProps) {
 	const [view, setView] = useState<ViewState>({ zoom: 1.0, panX: 0, panY: 0 });
 	const [showLegend, setShowLegend] = useState(false);
@@ -252,6 +259,9 @@ export function CanvasPane({
 				onFitToScreen={handleFitToScreen}
 				showLegend={showLegend}
 				onToggleLegend={() => setShowLegend((v) => !v)}
+				onEdit={onEdit}
+				onClone={onClone}
+				isEditMode={isEditMode}
 			/>
 
 			{/* Legend overlay — absolutely positioned below toolbar */}

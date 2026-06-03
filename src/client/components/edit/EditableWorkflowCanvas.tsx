@@ -164,9 +164,61 @@ function effectivePosition(
 	};
 }
 
-/** Block center in pixels — used to route transition lines. */
+/** Block center in pixels. */
 function blockCenter(pixelX: number, pixelY: number) {
 	return { cx: pixelX + BLOCK_WIDTH / 2, cy: pixelY + BLOCK_HEIGHT / 2 };
+}
+
+// ─────────────────────────────────────────────────────────────
+// BlockInfo — center + shape data used by TransitionLines
+// ─────────────────────────────────────────────────────────────
+
+interface BlockInfo {
+	cx: number;
+	cy: number;
+	shape: BlockShape;
+	halfW: number; // effective half-width for edge calculation
+	halfH: number; // effective half-height for edge calculation
+}
+
+// Gap in px between arrowhead tip and shape edge
+const ARROW_GAP = 3;
+
+/**
+ * Returns the point on the block's shape boundary in the given direction
+ * from the block's centre, pulled back by ARROW_GAP so the arrowhead sits
+ * just outside the shape rather than overlapping the border.
+ */
+function shapeEdgePoint(
+	cx: number,
+	cy: number,
+	dirX: number,
+	dirY: number,
+	shape: BlockShape,
+	halfW: number,
+	halfH: number,
+): { x: number; y: number } {
+	const len = Math.sqrt(dirX * dirX + dirY * dirY);
+	if (len < 0.001) return { x: cx, y: cy };
+	const nx = dirX / len;
+	const ny = dirY / len;
+
+	let t: number;
+	if (shape === "ellipse") {
+		// Parametric intersection: t = 1 / sqrt(nx²/a² + ny²/b²)
+		t =
+			1 / Math.sqrt((nx * nx) / (halfW * halfW) + (ny * ny) / (halfH * halfH));
+	} else if (shape === "diamond") {
+		// Diamond boundary: |x|/halfW + |y|/halfH = 1
+		t = 1 / (Math.abs(nx) / halfW + Math.abs(ny) / halfH);
+	} else {
+		// Rect: find nearest axis boundary
+		const tx = nx !== 0 ? Math.abs(halfW / nx) : Infinity;
+		const ty = ny !== 0 ? Math.abs(halfH / ny) : Infinity;
+		t = Math.min(tx, ty);
+	}
+
+	return { x: cx + nx * (t - ARROW_GAP), y: cy + ny * (t - ARROW_GAP) };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -382,7 +434,7 @@ function WorkflowBlock({
 
 interface TransitionLinesProps {
 	transitions: ParsedWorkflowTransition[];
-	centerMap: Map<string, { cx: number; cy: number }>;
+	centerMap: Map<string, BlockInfo>;
 	canvasWidth: number;
 	canvasHeight: number;
 }
@@ -441,9 +493,9 @@ function TransitionLines({
 			</defs>
 
 			{transitions.map((t) => {
-				const from = centerMap.get(t.fromStepId);
-				const to = centerMap.get(t.toStepId);
-				if (!from || !to) return null;
+				const src = centerMap.get(t.fromStepId);
+				const tgt = centerMap.get(t.toStepId);
+				if (!src || !tgt) return null;
 
 				// Derive colour and marker from type (disable takes priority) and synchronous flag
 				const isDisable = t.type === "disable";
@@ -461,7 +513,7 @@ function TransitionLines({
 
 				// Self-transition: draw a small cubic-Bezier arc above the block
 				if (t.fromStepId === t.toStepId) {
-					const { cx, cy } = from;
+					const { cx, cy } = src;
 					const topY = cy - BLOCK_HEIGHT / 2;
 					const loopR = 18;
 					const loopX1 = cx - loopR;
@@ -480,25 +532,42 @@ function TransitionLines({
 					);
 				}
 
-				// Shorten the line slightly so the arrowhead doesn't overlap the block center
-				const dx = to.cx - from.cx;
-				const dy = to.cy - from.cy;
-				const len = Math.sqrt(dx * dx + dy * dy) || 1;
-				const shorten = 12; // pixels to pull back from target
-				const tx = to.cx - (dx / len) * shorten;
-				const ty = to.cy - (dy / len) * shorten;
+				// Direction vector from source centre to target centre
+				const dx = tgt.cx - src.cx;
+				const dy = tgt.cy - src.cy;
+
+				// Source exit point — on source block edge, pointing toward target
+				const { x: x1, y: y1 } = shapeEdgePoint(
+					src.cx,
+					src.cy,
+					dx,
+					dy,
+					src.shape,
+					src.halfW,
+					src.halfH,
+				);
+				// Target entry point — on target block edge, pointing toward source
+				const { x: x2, y: y2 } = shapeEdgePoint(
+					tgt.cx,
+					tgt.cy,
+					-dx,
+					-dy,
+					tgt.shape,
+					tgt.halfW,
+					tgt.halfH,
+				);
 
 				// Midpoint for optional condition label
-				const midX = (from.cx + to.cx) / 2;
-				const midY = (from.cy + to.cy) / 2;
+				const midX = (x1 + x2) / 2;
+				const midY = (y1 + y2) / 2;
 
 				return (
 					<g key={t.id}>
 						<line
-							x1={from.cx}
-							y1={from.cy}
-							x2={tx}
-							y2={ty}
+							x1={x1}
+							y1={y1}
+							x2={x2}
+							y2={y2}
 							stroke={strokeColor}
 							strokeWidth={2}
 							markerEnd={`url(#${markerId})`}
@@ -652,9 +721,25 @@ export function EditableWorkflowCanvas({
 	const canvasHeight = (maxGY + 2) * CELL_HEIGHT;
 
 	// ── Center map for transition line endpoints ──────────────
-	const centerMap = new Map<string, { cx: number; cy: number }>();
+	const centerMap = new Map<string, BlockInfo>();
 	for (const { step, pixelX, pixelY } of stepPositions) {
-		centerMap.set(step.id, blockCenter(pixelX, pixelY));
+		const { cx, cy } = blockCenter(pixelX, pixelY);
+		const styles =
+			BLOCK_TYPE_STYLES[step.serviceWorkflowBlock.type] ?? DEFAULT_STYLE;
+		let halfW: number;
+		let halfH: number;
+		if (styles.shape === "diamond") {
+			// Rotated square: vertex tips sit at dSize/√2 from centre
+			const dSize = Math.round(Math.min(BLOCK_WIDTH, BLOCK_HEIGHT) * 0.82);
+			const r = dSize / Math.SQRT2;
+			halfW = r;
+			halfH = r;
+		} else {
+			// ellipse and rect: use block half-dimensions
+			halfW = BLOCK_WIDTH / 2;
+			halfH = BLOCK_HEIGHT / 2;
+		}
+		centerMap.set(step.id, { cx, cy, shape: styles.shape, halfW, halfH });
 	}
 
 	const isDraggingAny = dragState !== null;
