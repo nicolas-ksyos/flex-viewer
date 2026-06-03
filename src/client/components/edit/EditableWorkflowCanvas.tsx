@@ -500,6 +500,7 @@ export function EditableWorkflowCanvas({
 	) => {
 		if (readOnly) return;
 		e.preventDefault();
+		e.stopPropagation(); // prevent canvas-pan handler from firing on block clicks
 		const { pixelX, pixelY } = effectivePosition(
 			step,
 			pendingChanges,

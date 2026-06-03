@@ -16,6 +16,16 @@ import {
 import { WorkflowLegend } from "./WorkflowLegend";
 
 // ─────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────
+
+interface ViewState {
+	zoom: number;
+	panX: number;
+	panY: number;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Props
 // ─────────────────────────────────────────────────────────────
 
@@ -39,12 +49,20 @@ export interface CanvasPaneProps {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Self-contained canvas panel that owns zoom state, auto-fit on load,
- * the CanvasToolbar, and the zoom wrapper. Renders EditableWorkflowCanvas
- * in either read-only (view) or interactive (edit) mode.
+ * Self-contained canvas panel that owns pan + zoom state, auto-fit on load,
+ * the CanvasToolbar, and the transform wrapper.
  *
- * Zoom is applied via a spacer + CSS scale pattern so scrollbars always
- * reflect the full zoomed canvas size.
+ * The viewport always fills the available area (overflow: hidden — no
+ * scrollbars). The workflow is repositioned and scaled via a single CSS
+ * transform: translate(panX, panY) scale(zoom).
+ *
+ * Interaction model:
+ *   - Left-click-drag on canvas background → pan
+ *   - Left-click-drag on a block (edit mode) → move block (stopPropagation
+ *     in EditableWorkflowCanvas prevents pan from starting)
+ *   - Mouse wheel → zoom toward cursor
+ *   - Toolbar +/- → zoom toward viewport centre
+ *   - Toolbar ⊡ → fit workflow to screen
  */
 export function CanvasPane({
 	workflow,
@@ -54,65 +72,167 @@ export function CanvasPane({
 	onBlockMove,
 	onInfoFieldChange,
 }: CanvasPaneProps) {
-	const [zoomLevel, setZoomLevel] = useState(1.0);
+	const [view, setView] = useState<ViewState>({ zoom: 1.0, panX: 0, panY: 0 });
 	const [showLegend, setShowLegend] = useState(false);
+	const [isPanning, setIsPanning] = useState(false);
+
+	/** The DOM node for the viewport div — used for dimension queries and
+	 *  the non-passive wheel listener. */
 	const containerRef = useRef<HTMLDivElement>(null);
 
-	// ── Zoom handlers ─────────────────────────────────────────
+	/** Tracks whether a pan drag is in progress (avoids stale closure in global
+	 *  mousemove/mouseup handlers). */
+	const isPanningRef = useRef(false);
 
-	const handleZoomIn = useCallback(() => {
-		setZoomLevel((z) =>
-			Math.min(MAX_ZOOM, parseFloat((z + ZOOM_STEP).toFixed(2))),
-		);
-	}, []);
+	/** Captures the mouse + pan values at the start of each pan gesture. */
+	const panStartRef = useRef({ mouseX: 0, mouseY: 0, panX: 0, panY: 0 });
 
-	const handleZoomOut = useCallback(() => {
-		setZoomLevel((z) =>
-			Math.max(MIN_ZOOM, parseFloat((z - ZOOM_STEP).toFixed(2))),
-		);
-	}, []);
+	// ── Fit to screen ─────────────────────────────────────────
 
 	const handleFitToScreen = useCallback(() => {
 		const { width: cw, height: ch } = computeCanvasSize(
 			workflow.steps,
 			pendingChanges,
 		);
-
 		if (!containerRef.current || cw === 0 || ch === 0) {
-			setZoomLevel(1.0);
+			setView({ zoom: 1.0, panX: 0, panY: 0 });
 			return;
 		}
-
 		const { clientWidth, clientHeight } = containerRef.current;
-		// Leave a small margin so the workflow doesn't sit flush against edges
 		const margin = 48;
-		const fit = Math.min(
+		const fitZoom = Math.min(
 			(clientWidth - margin) / cw,
 			(clientHeight - margin) / ch,
 			MAX_ZOOM,
 		);
-		setZoomLevel(Math.max(MIN_ZOOM, parseFloat(fit.toFixed(2))));
+		const clampedZoom = Math.max(MIN_ZOOM, parseFloat(fitZoom.toFixed(2)));
+		// Centre the workflow inside the viewport
+		const newPanX = (clientWidth - cw * clampedZoom) / 2;
+		const newPanY = (clientHeight - ch * clampedZoom) / 2;
+		setView({ zoom: clampedZoom, panX: newPanX, panY: newPanY });
 	}, [workflow.steps, pendingChanges]);
 
-	// ── Auto-fit when workflow changes (new seed loaded) ──────
-	// eslint-disable-next-line react-hooks/exhaustive-deps
+	// ── Zoom toward viewport centre (toolbar buttons) ─────────
+
+	const handleZoomIn = useCallback(() => {
+		setView((v) => {
+			const newZoom = Math.min(
+				MAX_ZOOM,
+				parseFloat((v.zoom + ZOOM_STEP).toFixed(2)),
+			);
+			if (!containerRef.current) return { ...v, zoom: newZoom };
+			const cx = containerRef.current.clientWidth / 2;
+			const cy = containerRef.current.clientHeight / 2;
+			const factor = newZoom / v.zoom;
+			return {
+				zoom: newZoom,
+				panX: cx - (cx - v.panX) * factor,
+				panY: cy - (cy - v.panY) * factor,
+			};
+		});
+	}, []);
+
+	const handleZoomOut = useCallback(() => {
+		setView((v) => {
+			const newZoom = Math.max(
+				MIN_ZOOM,
+				parseFloat((v.zoom - ZOOM_STEP).toFixed(2)),
+			);
+			if (!containerRef.current) return { ...v, zoom: newZoom };
+			const cx = containerRef.current.clientWidth / 2;
+			const cy = containerRef.current.clientHeight / 2;
+			const factor = newZoom / v.zoom;
+			return {
+				zoom: newZoom,
+				panX: cx - (cx - v.panX) * factor,
+				panY: cy - (cy - v.panY) * factor,
+			};
+		});
+	}, []);
+
+	// ── Wheel zoom — must be non-passive to call preventDefault ─
+
 	useEffect(() => {
-		// Defer so the container has finished laying out
+		const el = containerRef.current;
+		if (!el) return;
+
+		const handleWheel = (e: WheelEvent) => {
+			e.preventDefault();
+			const rect = el.getBoundingClientRect();
+			const mouseX = e.clientX - rect.left;
+			const mouseY = e.clientY - rect.top;
+			// Zoom in on wheel-up (deltaY < 0), out on wheel-down (deltaY > 0)
+			const delta = e.deltaY > 0 ? 0.9 : 1.1;
+			setView((v) => {
+				const newZoom = Math.min(
+					MAX_ZOOM,
+					Math.max(MIN_ZOOM, parseFloat((v.zoom * delta).toFixed(3))),
+				);
+				const factor = newZoom / v.zoom;
+				return {
+					zoom: newZoom,
+					panX: mouseX - (mouseX - v.panX) * factor,
+					panY: mouseY - (mouseY - v.panY) * factor,
+				};
+			});
+		};
+
+		// { passive: false } is required so we can call preventDefault()
+		el.addEventListener("wheel", handleWheel, { passive: false });
+		return () => el.removeEventListener("wheel", handleWheel);
+	}, []); // attach once; handler uses functional updater so no stale closure
+
+	// ── Global pan handlers (mousemove / mouseup on window) ───
+
+	useEffect(() => {
+		const handleMouseMove = (e: MouseEvent) => {
+			if (!isPanningRef.current) return;
+			const dx = e.clientX - panStartRef.current.mouseX;
+			const dy = e.clientY - panStartRef.current.mouseY;
+			setView((v) => ({
+				...v,
+				panX: panStartRef.current.panX + dx,
+				panY: panStartRef.current.panY + dy,
+			}));
+		};
+
+		const handleMouseUp = () => {
+			if (isPanningRef.current) {
+				isPanningRef.current = false;
+				setIsPanning(false);
+			}
+		};
+
+		window.addEventListener("mousemove", handleMouseMove);
+		window.addEventListener("mouseup", handleMouseUp);
+		return () => {
+			window.removeEventListener("mousemove", handleMouseMove);
+			window.removeEventListener("mouseup", handleMouseUp);
+		};
+	}, []); // attach once
+
+	// ── Auto-fit when workflow identity changes ───────────────
+
+	useEffect(() => {
+		// Defer 50 ms so the container has finished laying out before we read
+		// its clientWidth / clientHeight.
 		const id = setTimeout(() => handleFitToScreen(), 50);
 		return () => clearTimeout(id);
-	}, [workflow]); // intentionally depend only on workflow identity
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [workflow]); // intentionally only re-fire when the workflow object changes
 
-	// ── Canvas size for the spacer ────────────────────────────
-	const { width: naturalW, height: naturalH } = computeCanvasSize(
-		workflow.steps,
-		pendingChanges,
-	);
+	// ── No-op block-move fallback for view mode ───────────────
 
-	// ── No-op fallbacks for view mode ─────────────────────────
 	const noopBlockMove = useCallback(
 		(_stepId: string, _gx: number, _gy: number) => {},
 		[],
 	);
+
+	// ── Destructure for use in JSX ────────────────────────────
+
+	const { zoom, panX, panY } = view;
+
+	// ── Render ────────────────────────────────────────────────
 
 	return (
 		<div
@@ -124,9 +244,9 @@ export function CanvasPane({
 				flexDirection: "column",
 			}}
 		>
-			{/* ── Toolbar (absolutely positioned top-left) ─────── */}
+			{/* Toolbar — absolutely positioned top-left, floats above viewport */}
 			<CanvasToolbar
-				zoomLevel={zoomLevel}
+				zoomLevel={zoom}
 				onZoomIn={handleZoomIn}
 				onZoomOut={handleZoomOut}
 				onFitToScreen={handleFitToScreen}
@@ -134,40 +254,49 @@ export function CanvasPane({
 				onToggleLegend={() => setShowLegend((v) => !v)}
 			/>
 
-			{/* ── Legend overlay (below toolbar) ───────────────── */}
+			{/* Legend overlay — absolutely positioned below toolbar */}
 			{showLegend && <WorkflowLegend onClose={() => setShowLegend(false)} />}
 
-			{/* ── Scroll container ─────────────────────────────── */}
+			{/*
+			 * Viewport — fills all remaining space; overflow:hidden clips content
+			 * that pans outside the visible area.  All pan and wheel events are
+			 * handled here.
+			 */}
 			<div
 				ref={containerRef}
-				style={{ flex: 1, overflow: "auto", position: "relative" }}
+				onMouseDown={(e) => {
+					if (e.button !== 0) return;
+					isPanningRef.current = true;
+					setIsPanning(true);
+					// Capture the starting positions in a ref so the global
+					// mousemove handler (which has no closure over view) can
+					// compute deltas correctly.
+					panStartRef.current = {
+						mouseX: e.clientX,
+						mouseY: e.clientY,
+						panX: view.panX, // fresh from render closure
+						panY: view.panY,
+					};
+					e.preventDefault();
+				}}
+				style={{
+					flex: 1,
+					position: "relative",
+					overflow: "hidden",
+					cursor: isPanning ? "grabbing" : "grab",
+				}}
 			>
 				{/*
-				 * Spacer: establishes the correct scroll area for the current zoom.
-				 * Its dimensions are naturalSize × zoomLevel, which matches the
-				 * visual footprint of the CSS-scaled canvas below.
-				 */}
-				<div
-					style={{
-						width: naturalW * zoomLevel,
-						height: naturalH * zoomLevel,
-						// Prevent spacer from capturing pointer events
-						pointerEvents: "none",
-					}}
-				/>
-
-				{/*
-				 * Scaled canvas: absolutely positioned so it doesn't push the spacer
-				 * around. transform: scale() is applied at top-left origin so it
-				 * expands rightward/downward matching the spacer exactly.
+				 * Transform layer — a single CSS transform positions and scales
+				 * the entire workflow.  No scrollbars; no spacer.
 				 */}
 				<div
 					style={{
 						position: "absolute",
 						top: 0,
 						left: 0,
-						transformOrigin: "top left",
-						transform: `scale(${zoomLevel})`,
+						transformOrigin: "0 0",
+						transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
 					}}
 				>
 					<EditableWorkflowCanvas
@@ -175,8 +304,7 @@ export function CanvasPane({
 						pendingChanges={pendingChanges}
 						readOnly={mode === "view"}
 						highlightedStepId={highlightedStepId}
-						// Pass zoomLevel so the canvas can correct drag deltas
-						zoomLevel={zoomLevel}
+						zoomLevel={zoom}
 						onBlockMove={
 							mode === "edit" && onBlockMove ? onBlockMove : noopBlockMove
 						}
