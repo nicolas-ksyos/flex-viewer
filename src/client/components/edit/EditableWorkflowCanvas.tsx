@@ -69,7 +69,7 @@ const BLOCK_TYPE_STYLES: Record<string, BlockStyle> = {
 		border: "#FF37F0",
 		text: "#322A24",
 		shape: "diamond",
-		borderWidth: 8,
+		borderWidth: 4, // matches general/scheduled
 	},
 	general: {
 		bg: "#FAFAFA",
@@ -270,12 +270,9 @@ function WorkflowBlock({
 		// Elevate dragging block above siblings
 		zIndex: isDragging ? 100 : 1,
 		opacity: isDragging ? 0.85 : 1,
-		boxShadow: isDragging
-			? "0 8px 24px rgba(0,0,0,0.18)"
-			: isHighlighted
-				? "0 0 0 3px rgba(59, 130, 246, 0.35), 0 1px 4px rgba(0,0,0,0.08)"
-				: "0 1px 4px rgba(0,0,0,0.08)",
-		// Smooth movement during drag
+		// boxShadow intentionally omitted — each shape applies its own shadow
+		// so the shadow follows the actual shape (circle/diamond/rect) rather
+		// than the rectangular 180×90 bounding box.
 		willChange: isDragging ? "left, top" : undefined,
 	};
 
@@ -368,9 +365,16 @@ function WorkflowBlock({
 	};
 
 	// ── Ellipse (start) ──────────────────────────────────────
+	// The boxShadow is on the inner circle div (which has borderRadius:50%) so
+	// the shadow and highlight ring are circular, not rectangular.
 	if (styles.shape === "ellipse") {
 		return (
-			<div {...sharedOuterProps}>
+			<div
+				style={outerStyle}
+				onMouseDown={readOnly ? undefined : onMouseDown}
+				onMouseEnter={onMouseEnter}
+				onMouseLeave={onMouseLeave}
+			>
 				<div
 					style={{
 						position: "absolute",
@@ -378,6 +382,12 @@ function WorkflowBlock({
 						borderRadius: "50%",
 						backgroundColor: styles.bg,
 						border: `${styles.borderWidth}px solid ${styles.border}`,
+						// box-shadow respects border-radius, so this produces a circular shadow
+						boxShadow: isDragging
+							? "0 8px 24px rgba(0,0,0,0.18)"
+							: isHighlighted
+								? "0 0 0 3px rgba(59,130,246,0.35), 0 1px 4px rgba(0,0,0,0.08)"
+								: "0 1px 4px rgba(0,0,0,0.08)",
 					}}
 				/>
 				{textContent}
@@ -387,22 +397,31 @@ function WorkflowBlock({
 	}
 
 	// ── Diamond (choice) ─────────────────────────────────────
+	// clip-path fills the full 180×90 bounding box as a diamond.
+	// inset box-shadow is clipped to the diamond shape for the border.
+	// filter:drop-shadow on the outer wrapper follows the painted pixels
+	// (the clipped diamond) rather than the rectangular bounding box.
 	if (styles.shape === "diamond") {
-		const dSize = Math.round(Math.min(BLOCK_WIDTH, BLOCK_HEIGHT) * 0.82);
-		const dLeft = Math.round((BLOCK_WIDTH - dSize) / 2);
-		const dTop = Math.round((BLOCK_HEIGHT - dSize) / 2);
+		const shadowFilter = isDragging
+			? "drop-shadow(0 8px 24px rgba(0,0,0,0.18))"
+			: isHighlighted
+				? "drop-shadow(0 0 4px rgba(59,130,246,0.6))"
+				: "drop-shadow(0 1px 3px rgba(0,0,0,0.10))";
 		return (
-			<div {...sharedOuterProps}>
+			<div
+				style={{ ...outerStyle, filter: shadowFilter }}
+				onMouseDown={readOnly ? undefined : onMouseDown}
+				onMouseEnter={onMouseEnter}
+				onMouseLeave={onMouseLeave}
+			>
 				<div
 					style={{
 						position: "absolute",
-						left: dLeft,
-						top: dTop,
-						width: dSize,
-						height: dSize,
-						transform: "rotate(45deg)",
+						inset: 0,
+						clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
 						backgroundColor: styles.bg,
-						border: `${styles.borderWidth}px solid ${styles.border}`,
+						// inset box-shadow is clipped to the diamond shape
+						boxShadow: `inset 0 0 0 ${styles.borderWidth}px ${styles.border}`,
 					}}
 				/>
 				{textContent}
@@ -412,6 +431,8 @@ function WorkflowBlock({
 	}
 
 	// ── Rectangle (default) ──────────────────────────────────
+	// boxShadow lives on the inner background div (same dimensions as outer),
+	// keeping the pattern consistent across all three shapes.
 	return (
 		<div {...sharedOuterProps}>
 			<div
@@ -420,6 +441,11 @@ function WorkflowBlock({
 					inset: 0,
 					backgroundColor: styles.bg,
 					border: `${styles.borderWidth}px solid ${styles.border}`,
+					boxShadow: isDragging
+						? "0 8px 24px rgba(0,0,0,0.18)"
+						: isHighlighted
+							? "0 0 0 3px rgba(59,130,246,0.35), 0 1px 4px rgba(0,0,0,0.08)"
+							: "0 1px 4px rgba(0,0,0,0.08)",
 				}}
 			/>
 			{textContent}
@@ -729,11 +755,11 @@ export function EditableWorkflowCanvas({
 		let halfW: number;
 		let halfH: number;
 		if (styles.shape === "diamond") {
-			// Rotated square: vertex tips sit at dSize/√2 from centre
-			const dSize = Math.round(Math.min(BLOCK_WIDTH, BLOCK_HEIGHT) * 0.82);
-			const r = dSize / Math.SQRT2;
-			halfW = r;
-			halfH = r;
+			// Full-width diamond (clip-path fills the block bounding box):
+			// vertices sit at the midpoint of each edge, so half-extents equal
+			// the block half-dimensions.
+			halfW = BLOCK_WIDTH / 2;
+			halfH = BLOCK_HEIGHT / 2;
 		} else {
 			// ellipse and rect: use block half-dimensions
 			halfW = BLOCK_WIDTH / 2;

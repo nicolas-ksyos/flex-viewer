@@ -348,7 +348,13 @@ export function App() {
 							</Box>
 						) : (
 							/* ── View mode ─────────────────────────────────── */
-							<Box flex={1} position="relative" display="flex" flexDirection="column" style={{ overflow: "hidden" }}>
+							<Box
+								flex={1}
+								position="relative"
+								display="flex"
+								flexDirection="column"
+								style={{ overflow: "hidden" }}
+							>
 								{currentWorkflow && (
 									<CanvasPane
 										workflow={currentWorkflow.workflow}
