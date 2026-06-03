@@ -1,0 +1,22 @@
+/* ---------------------------------------------------------------
+   EditableWorkflowCanvas — grid overlay shown while dragging
+   --------------------------------------------------------------- */
+
+.editable-canvas {
+	flex: 1;
+	position: relative;
+	overflow: auto;
+}
+
+/* Subtle dot-grid shown only while a block is being dragged */
+.canvas--dragging {
+	background-image:
+		linear-gradient(to right, rgba(0, 0, 0, 0.06) 1px, transparent 1px),
+		linear-gradient(to bottom, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+	background-size: 220px 130px; /* CELL_WIDTH × CELL_HEIGHT */
+}
+
+/* Force grabbing cursor on everything while dragging */
+.canvas--dragging * {
+	cursor: grabbing !important;
+}
