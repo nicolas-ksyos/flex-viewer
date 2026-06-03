@@ -427,38 +427,95 @@ function TransitionLines({
 				>
 					<polygon points="0 0, 10 4, 0 8" fill="#FF9A1E" />
 				</marker>
+				{/* Red arrow — disable transitions */}
+				<marker
+					id="ewa-arrow-disable"
+					markerWidth="10"
+					markerHeight="8"
+					refX="10"
+					refY="4"
+					orient="auto"
+				>
+					<polygon points="0 0, 10 4, 0 8" fill="#EE1111" />
+				</marker>
 			</defs>
 
 			{transitions.map((t) => {
 				const from = centerMap.get(t.fromStepId);
 				const to = centerMap.get(t.toStepId);
 				if (!from || !to) return null;
-				// Skip self-transitions (loops handled separately if needed)
-				if (t.fromStepId === t.toStepId) return null;
 
+				// Derive colour and marker from type (disable takes priority) and synchronous flag
+				const isDisable = t.type === "disable";
 				const isSynchronous = t.synchronous;
-				const strokeColor = isSynchronous ? "#FF37F0" : "#FF9A1E";
-				const markerId = isSynchronous ? "ewa-arrow-sync" : "ewa-arrow-async";
+				const strokeColor = isDisable
+					? "#EE1111"
+					: isSynchronous
+						? "#FF37F0"
+						: "#FF9A1E";
+				const markerId = isDisable
+					? "ewa-arrow-disable"
+					: isSynchronous
+						? "ewa-arrow-sync"
+						: "ewa-arrow-async";
+
+				// Self-transition: draw a small cubic-Bezier arc above the block
+				if (t.fromStepId === t.toStepId) {
+					const { cx, cy } = from;
+					const topY = cy - BLOCK_HEIGHT / 2;
+					const loopR = 18;
+					const loopX1 = cx - loopR;
+					const loopX2 = cx + loopR;
+					const loopArcY = topY - loopR * 1.2;
+					const path = `M ${loopX1} ${topY} C ${loopX1} ${loopArcY}, ${loopX2} ${loopArcY}, ${loopX2} ${topY}`;
+					return (
+						<path
+							key={t.id}
+							d={path}
+							fill="none"
+							stroke={strokeColor}
+							strokeWidth={2}
+							markerEnd={`url(#${markerId})`}
+						/>
+					);
+				}
 
 				// Shorten the line slightly so the arrowhead doesn't overlap the block center
 				const dx = to.cx - from.cx;
 				const dy = to.cy - from.cy;
 				const len = Math.sqrt(dx * dx + dy * dy) || 1;
 				const shorten = 12; // pixels to pull back from target
-				const x2 = to.cx - (dx / len) * shorten;
-				const y2 = to.cy - (dy / len) * shorten;
+				const tx = to.cx - (dx / len) * shorten;
+				const ty = to.cy - (dy / len) * shorten;
+
+				// Midpoint for optional condition label
+				const midX = (from.cx + to.cx) / 2;
+				const midY = (from.cy + to.cy) / 2;
 
 				return (
-					<line
-						key={t.id}
-						x1={from.cx}
-						y1={from.cy}
-						x2={x2}
-						y2={y2}
-						stroke={strokeColor}
-						strokeWidth={2}
-						markerEnd={`url(#${markerId})`}
-					/>
+					<g key={t.id}>
+						<line
+							x1={from.cx}
+							y1={from.cy}
+							x2={tx}
+							y2={ty}
+							stroke={strokeColor}
+							strokeWidth={2}
+							markerEnd={`url(#${markerId})`}
+						/>
+						{t.onlyIfOutputEquals && (
+							<text
+								x={midX}
+								y={midY - 6}
+								fontSize={10}
+								fill={strokeColor}
+								textAnchor="middle"
+								style={{ pointerEvents: "none", userSelect: "none" }}
+							>
+								{t.onlyIfOutputEquals}
+							</text>
+						)}
+					</g>
 				);
 			})}
 		</svg>
