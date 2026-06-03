@@ -17,26 +17,26 @@ const CELL_WIDTH = 220; // must match EditableWorkflowCanvas constant
 const CELL_HEIGHT = 130;
 
 export function computeCanvasSize(
-  steps: ParsedWorkflowStep[],
-  pendingChanges: StepPendingChange[],
+	steps: ParsedWorkflowStep[],
+	pendingChanges: StepPendingChange[],
 ): { width: number; height: number } {
-  if (steps.length === 0) return { width: 440, height: 260 };
-  const maxGX = Math.max(
-    ...steps.map((s) => {
-      const p = pendingChanges.find((c) => c.stepId === s.id);
-      return p?.fields.x ?? s.displayOptions.x;
-    }),
-  );
-  const maxGY = Math.max(
-    ...steps.map((s) => {
-      const p = pendingChanges.find((c) => c.stepId === s.id);
-      return p?.fields.y ?? s.displayOptions.y;
-    }),
-  );
-  return {
-    width: (maxGX + 2) * CELL_WIDTH,
-    height: (maxGY + 2) * CELL_HEIGHT,
-  };
+	if (steps.length === 0) return { width: 440, height: 260 };
+	const maxGX = Math.max(
+		...steps.map((s) => {
+			const p = pendingChanges.find((c) => c.stepId === s.id);
+			return p?.fields.x ?? s.displayOptions.x;
+		}),
+	);
+	const maxGY = Math.max(
+		...steps.map((s) => {
+			const p = pendingChanges.find((c) => c.stepId === s.id);
+			return p?.fields.y ?? s.displayOptions.y;
+		}),
+	);
+	return {
+		width: (maxGX + 2) * CELL_WIDTH,
+		height: (maxGY + 2) * CELL_HEIGHT,
+	};
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -44,111 +44,182 @@ export function computeCanvasSize(
 // ─────────────────────────────────────────────────────────────
 
 interface CanvasToolbarProps {
-  zoomLevel: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onFitToScreen: () => void;
+	zoomLevel: number;
+	onZoomIn: () => void;
+	onZoomOut: () => void;
+	onFitToScreen: () => void;
+	showLegend?: boolean;
+	onToggleLegend?: () => void;
 }
 
 const toolbarBtnStyle: React.CSSProperties = {
-  background: "none",
-  border: "none",
-  cursor: "pointer",
-  fontSize: 16,
-  lineHeight: 1,
-  padding: "2px 6px",
-  borderRadius: 4,
-  color: "#374151",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
+	background: "none",
+	border: "none",
+	cursor: "pointer",
+	fontSize: 16,
+	lineHeight: 1,
+	padding: "2px 6px",
+	borderRadius: 4,
+	color: "#374151",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
 };
 
 const toolbarBtnDisabledStyle: React.CSSProperties = {
-  ...toolbarBtnStyle,
-  opacity: 0.35,
-  cursor: "default",
+	...toolbarBtnStyle,
+	opacity: 0.35,
+	cursor: "default",
 };
 
 export function CanvasToolbar({
-  zoomLevel,
-  onZoomIn,
-  onZoomOut,
-  onFitToScreen,
+	zoomLevel,
+	onZoomIn,
+	onZoomOut,
+	onFitToScreen,
+	showLegend,
+	onToggleLegend,
 }: CanvasToolbarProps) {
-  const canZoomOut = zoomLevel > MIN_ZOOM;
-  const canZoomIn = zoomLevel < MAX_ZOOM;
+	const canZoomOut = zoomLevel > MIN_ZOOM;
+	const canZoomIn = zoomLevel < MAX_ZOOM;
 
-  return (
-    <div
-      style={{
-        position: "absolute",
-        top: 12,
-        left: 12,
-        zIndex: 10,
-        display: "flex",
-        alignItems: "center",
-        gap: 2,
-        background: "white",
-        border: "1px solid var(--kds-color-gray-200, #e5e7eb)",
-        borderRadius: 8,
-        padding: "4px 6px",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-        userSelect: "none",
-      }}
-    >
-      {/* Zoom out */}
-      <button
-        onClick={canZoomOut ? onZoomOut : undefined}
-        disabled={!canZoomOut}
-        title="Zoom out"
-        style={canZoomOut ? toolbarBtnStyle : toolbarBtnDisabledStyle}
-      >
-        −
-      </button>
+	return (
+		<div
+			style={{
+				position: "absolute",
+				top: 12,
+				left: 12,
+				zIndex: 10,
+				display: "flex",
+				alignItems: "center",
+				gap: 2,
+				background: "white",
+				border: "1px solid var(--kds-color-gray-200, #e5e7eb)",
+				borderRadius: 8,
+				padding: "4px 6px",
+				boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+				userSelect: "none",
+			}}
+		>
+			{/* Legend toggle — leftmost */}
+			{onToggleLegend && (
+				<>
+					<button
+						onClick={onToggleLegend}
+						title={showLegend ? "Hide legend" : "Show legend"}
+						style={{
+							...toolbarBtnStyle,
+							background: showLegend ? "#f3f4f6" : "none",
+						}}
+					>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 14 14"
+							fill="none"
+							xmlns="http://www.w3.org/2000/svg"
+							style={{ display: "block" }}
+						>
+							<rect
+								x="1"
+								y="2"
+								width="4"
+								height="4"
+								rx="1"
+								fill="currentColor"
+								opacity="0.7"
+							/>
+							<rect
+								x="1"
+								y="8"
+								width="4"
+								height="4"
+								rx="1"
+								fill="currentColor"
+								opacity="0.7"
+							/>
+							<rect
+								x="7"
+								y="3.5"
+								width="6"
+								height="1.5"
+								rx="0.75"
+								fill="currentColor"
+							/>
+							<rect
+								x="7"
+								y="9.5"
+								width="6"
+								height="1.5"
+								rx="0.75"
+								fill="currentColor"
+							/>
+						</svg>
+					</button>
+					<div
+						style={{
+							width: 1,
+							height: 16,
+							background: "#e5e7eb",
+							margin: "0 4px",
+							flexShrink: 0,
+						}}
+					/>
+				</>
+			)}
 
-      {/* Zoom level display */}
-      <span
-        style={{
-          fontSize: 11,
-          color: "#6b7280",
-          minWidth: 36,
-          textAlign: "center",
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        {Math.round(zoomLevel * 100)}%
-      </span>
+			{/* Zoom out */}
+			<button
+				onClick={canZoomOut ? onZoomOut : undefined}
+				disabled={!canZoomOut}
+				title="Zoom out"
+				style={canZoomOut ? toolbarBtnStyle : toolbarBtnDisabledStyle}
+			>
+				−
+			</button>
 
-      {/* Zoom in */}
-      <button
-        onClick={canZoomIn ? onZoomIn : undefined}
-        disabled={!canZoomIn}
-        title="Zoom in"
-        style={canZoomIn ? toolbarBtnStyle : toolbarBtnDisabledStyle}
-      >
-        +
-      </button>
+			{/* Zoom level display */}
+			<span
+				style={{
+					fontSize: 11,
+					color: "#6b7280",
+					minWidth: 36,
+					textAlign: "center",
+					fontVariantNumeric: "tabular-nums",
+				}}
+			>
+				{Math.round(zoomLevel * 100)}%
+			</span>
 
-      {/* Divider */}
-      <div
-        style={{
-          width: 1,
-          height: 16,
-          background: "#e5e7eb",
-          margin: "0 4px",
-          flexShrink: 0,
-        }}
-      />
+			{/* Zoom in */}
+			<button
+				onClick={canZoomIn ? onZoomIn : undefined}
+				disabled={!canZoomIn}
+				title="Zoom in"
+				style={canZoomIn ? toolbarBtnStyle : toolbarBtnDisabledStyle}
+			>
+				+
+			</button>
 
-      {/* Fit to screen */}
-      <button
-        onClick={onFitToScreen}
-        title="Fit workflow to screen"
-        style={toolbarBtnStyle}
-      >
-        ⊡
-      </button>
-    </div>
-  );
+			{/* Divider */}
+			<div
+				style={{
+					width: 1,
+					height: 16,
+					background: "#e5e7eb",
+					margin: "0 4px",
+					flexShrink: 0,
+				}}
+			/>
+
+			{/* Fit to screen */}
+			<button
+				onClick={onFitToScreen}
+				title="Fit workflow to screen"
+				style={toolbarBtnStyle}
+			>
+				⊡
+			</button>
+		</div>
+	);
 }

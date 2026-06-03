@@ -135,6 +135,8 @@ export interface EditableWorkflowCanvasProps {
 	zoomLevel?: number;
 	/** Step ID to highlight with a subtle blue glow (from sidebar hover) */
 	highlightedStepId?: string | null;
+	/** When true: no drag, no 'i' icon, default cursor. Use for view mode. */
+	readOnly?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -178,6 +180,7 @@ interface WorkflowBlockProps {
 	isDragging: boolean;
 	isHovered: boolean;
 	isHighlighted: boolean;
+	readOnly: boolean;
 	onMouseDown: (e: React.MouseEvent) => void;
 	onMouseEnter: () => void;
 	onMouseLeave: () => void;
@@ -191,6 +194,7 @@ function WorkflowBlock({
 	isDragging,
 	isHovered,
 	isHighlighted,
+	readOnly,
 	onMouseDown,
 	onMouseEnter,
 	onMouseLeave,
@@ -209,7 +213,7 @@ function WorkflowBlock({
 		top: pixelY,
 		width: BLOCK_WIDTH,
 		height: BLOCK_HEIGHT,
-		cursor: isDragging ? "grabbing" : "grab",
+		cursor: readOnly ? "default" : isDragging ? "grabbing" : "grab",
 		userSelect: "none",
 		// Elevate dragging block above siblings
 		zIndex: isDragging ? 100 : 1,
@@ -267,9 +271,9 @@ function WorkflowBlock({
 		</div>
 	);
 
-	// 'i' info icon — shown on hover, hidden while dragging
+	// 'i' info icon — shown on hover, hidden while dragging or in read-only mode
 	const infoIcon =
-		isHovered && !isDragging ? (
+		!readOnly && isHovered && !isDragging ? (
 			<button
 				onMouseDown={(e) => e.stopPropagation()}
 				onClick={(e) => {
@@ -306,7 +310,7 @@ function WorkflowBlock({
 
 	const sharedOuterProps = {
 		style: outerStyle,
-		onMouseDown,
+		onMouseDown: readOnly ? undefined : onMouseDown,
 		onMouseEnter,
 		onMouseLeave,
 	};
@@ -473,6 +477,7 @@ export function EditableWorkflowCanvas({
 	onInfoFieldChange,
 	zoomLevel,
 	highlightedStepId,
+	readOnly = false,
 }: EditableWorkflowCanvasProps) {
 	const zoom = zoomLevel ?? 1;
 
@@ -493,6 +498,7 @@ export function EditableWorkflowCanvas({
 		e: React.MouseEvent,
 		step: ParsedWorkflowStep,
 	) => {
+		if (readOnly) return;
 		e.preventDefault();
 		const { pixelX, pixelY } = effectivePosition(
 			step,
@@ -620,6 +626,7 @@ export function EditableWorkflowCanvas({
 					isDragging={activeDraggingStepId === step.id}
 					isHovered={hoveredStepId === step.id}
 					isHighlighted={highlightedStepId === step.id}
+					readOnly={readOnly}
 					onMouseDown={(e) => handleBlockMouseDown(e, step)}
 					onMouseEnter={() => setHoveredStepId(step.id)}
 					onMouseLeave={() => setHoveredStepId(null)}
