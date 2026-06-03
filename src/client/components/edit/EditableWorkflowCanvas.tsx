@@ -397,16 +397,21 @@ function WorkflowBlock({
 	}
 
 	// ── Diamond (choice) ─────────────────────────────────────
-	// clip-path fills the full 180×90 bounding box as a diamond.
-	// inset box-shadow is clipped to the diamond shape for the border.
-	// filter:drop-shadow on the outer wrapper follows the painted pixels
-	// (the clipped diamond) rather than the rectangular bounding box.
+	// SVG <polygon> with a proper stroke draws the border exactly along
+	// the diamond edge. The polygon points are inset by half the stroke
+	// width so the stroke stays within the block bounding box.
+	// filter:drop-shadow on the outer wrapper follows the SVG shape.
 	if (styles.shape === "diamond") {
 		const shadowFilter = isDragging
 			? "drop-shadow(0 8px 24px rgba(0,0,0,0.18))"
 			: isHighlighted
 				? "drop-shadow(0 0 4px rgba(59,130,246,0.6))"
 				: "drop-shadow(0 1px 3px rgba(0,0,0,0.10))";
+		// Inset polygon points by half stroke-width so the stroke is fully visible
+		const b = styles.borderWidth / 2;
+		const w = BLOCK_WIDTH;
+		const h = BLOCK_HEIGHT;
+		const pts = `${w / 2},${b} ${w - b},${h / 2} ${w / 2},${h - b} ${b},${h / 2}`;
 		return (
 			<div
 				style={{ ...outerStyle, filter: shadowFilter }}
@@ -414,16 +419,19 @@ function WorkflowBlock({
 				onMouseEnter={onMouseEnter}
 				onMouseLeave={onMouseLeave}
 			>
-				<div
-					style={{
-						position: "absolute",
-						inset: 0,
-						clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
-						backgroundColor: styles.bg,
-						// inset box-shadow is clipped to the diamond shape
-						boxShadow: `inset 0 0 0 ${styles.borderWidth}px ${styles.border}`,
-					}}
-				/>
+				<svg
+					width={BLOCK_WIDTH}
+					height={BLOCK_HEIGHT}
+					style={{ position: "absolute", inset: 0 }}
+				>
+					<polygon
+						points={pts}
+						fill={styles.bg}
+						stroke={styles.border}
+						strokeWidth={styles.borderWidth}
+						strokeLinejoin="miter"
+					/>
+				</svg>
 				{textContent}
 				{infoIcon}
 			</div>
