@@ -875,9 +875,9 @@ export function EditableWorkflowCanvas({
 							pendingFields={pending?.fields ?? {}}
 							onFieldChange={(field, value) =>
 								onInfoFieldChange?.(
-										popStep,
-										field,
-										value as string | number | null,
+									popStep,
+									field,
+									value as string | number | null,
 								)
 							}
 							onClose={() => setOpenPopoverStepId(null)}

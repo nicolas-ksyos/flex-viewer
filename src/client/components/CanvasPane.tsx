@@ -343,7 +343,9 @@ export function CanvasPane({
 							mode === "edit" && onBlockMove ? onBlockMove : noopBlockMove
 						}
 						onInfoFieldChange={mode === "edit" ? onInfoFieldChange : undefined}
-						onAddConnectionDraft={mode === "edit" ? onAddConnectionDraft : undefined}
+						onAddConnectionDraft={
+							mode === "edit" ? onAddConnectionDraft : undefined
+						}
 					/>
 				</div>
 			</div>

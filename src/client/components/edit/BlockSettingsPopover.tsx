@@ -461,7 +461,9 @@ export function BlockSettingsPopover({
 			{/* ── Connections ──────────────────────────────────────── */}
 			{allSteps && allSteps.length > 1 && (
 				<>
-					<div style={{ borderTop: "1px solid #f3f4f6", margin: "12px 0 10px" }} />
+					<div
+						style={{ borderTop: "1px solid #f3f4f6", margin: "12px 0 10px" }}
+					/>
 					<div
 						style={{
 							fontSize: 12,
