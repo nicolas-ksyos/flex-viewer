@@ -131,7 +131,11 @@ export function App() {
 		exitEditMode();
 		setSidebarVisible(true);
 		setHighlightedStepId(null);
-		setParseResult(null); // reset so the loading indicator shows while the file watcher re-parses
+		// Do NOT reset parseResult here — the file watcher will re-parse and
+		// broadcast a workflowUpdate via WebSocket which updates parseResult
+		// naturally. Resetting to null here risks a race: if the WS update
+		// arrives before this callback runs, setParseResult(null) would clear
+		// the already-updated data and leave the spinner showing forever.
 	}, [exitEditMode]);
 
 	// ── Lifecycle effects ─────────────────────────────────────────

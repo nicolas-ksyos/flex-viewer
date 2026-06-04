@@ -1179,6 +1179,18 @@ export function EditableWorkflowCanvas({
 		toStepId: string;
 	} | null>(null);
 
+	// Refs used inside the connection-drag effect so we always read
+	// the latest value without restarting the effect on every change.
+	const hoverTargetIdRef = useRef<string | null>(null);
+	const workflowStepsRef = useRef(workflow.steps);
+	const pendingChangesRef = useRef(pendingChanges);
+	useEffect(() => {
+		workflowStepsRef.current = workflow.steps;
+	}, [workflow.steps]);
+	useEffect(() => {
+		pendingChangesRef.current = pendingChanges;
+	}, [pendingChanges]);
+
 	// Ref on the canvas div for hit-test coordinate conversion
 	const canvasInnerRef = useRef<HTMLDivElement>(null);
 
@@ -1305,16 +1317,20 @@ export function EditableWorkflowCanvas({
 	useEffect(() => {
 		if (!connectionDrag) return;
 		const el = canvasInnerRef.current;
+		// Reset the hover-target ref whenever a new drag starts
+		hoverTargetIdRef.current = null;
 
 		const handleMouseMove = (e: MouseEvent) => {
 			const rect = el?.getBoundingClientRect();
 			if (!rect) return;
 			const canvasX = (e.clientX - rect.left) / zoom;
 			const canvasY = (e.clientY - rect.top) / zoom;
-			const targetStep = workflow.steps.find((s) => {
+			// Use refs so we always hit-test against the latest step positions
+			// without needing to restart the effect on every pendingChanges change.
+			const targetStep = workflowStepsRef.current.find((s) => {
 				const { pixelX, pixelY } = effectivePosition(
 					s,
-					pendingChanges,
+					pendingChangesRef.current,
 					null,
 					null,
 				);
@@ -1326,6 +1342,8 @@ export function EditableWorkflowCanvas({
 					s.id !== connectionDrag.fromStepId
 				);
 			});
+			// Update ref synchronously — handleMouseUp reads this, not the async state
+			hoverTargetIdRef.current = targetStep?.id ?? null;
 			setConnectionDrag((prev) =>
 				prev
 					? {
@@ -1339,12 +1357,18 @@ export function EditableWorkflowCanvas({
 		};
 
 		const handleMouseUp = () => {
-			if (connectionDrag.hoverTargetId) {
+			// Read from ref, not from the stale connectionDrag closure value.
+			// The closure captures connectionDrag at effect-setup time when
+			// hoverTargetId is always null; the ref is updated synchronously
+			// inside handleMouseMove so it always holds the latest target.
+			const targetId = hoverTargetIdRef.current;
+			if (targetId) {
 				setPendingConnectionDraft({
 					fromStepId: connectionDrag.fromStepId,
-					toStepId: connectionDrag.hoverTargetId,
+					toStepId: targetId,
 				});
 			}
+			hoverTargetIdRef.current = null;
 			setConnectionDrag(null);
 		};
 
