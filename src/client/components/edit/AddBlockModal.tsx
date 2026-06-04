@@ -230,8 +230,7 @@ export function AddBlockModal({
 				nextStepIds: nextStepIds.length > 0 ? nextStepIds : undefined,
 				synchronousNextStepIds:
 					syncNextStepIds.length > 0 ? syncNextStepIds : undefined,
-				parameters:
-					Object.keys(parameters).length > 0 ? parameters : undefined,
+				parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
 			},
 			variableName: varName,
 		});

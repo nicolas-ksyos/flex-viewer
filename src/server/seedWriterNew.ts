@@ -552,7 +552,9 @@ function formatParamObject(
 	const inner = "    ".repeat(depth + 1);
 	const entries = Object.entries(obj);
 	if (entries.length === 0) return "{}";
-	const lines = entries.map(([k, v]) => `${inner}${k}: ${formatParamValue(v, depth + 1)}`);
+	const lines = entries.map(
+		([k, v]) => `${inner}${k}: ${formatParamValue(v, depth + 1)}`,
+	);
 	return `{\n${lines.join(",\n")},\n${indent}}`;
 }
 
@@ -568,7 +570,8 @@ function formatParamValue(v: unknown, depth: number): string {
 		if (v.length === 0) return "[]";
 		const indent = "    ".repeat(depth);
 		const items = v.map(
-			(item) => `${"    ".repeat(depth + 1)}${formatParamValue(item, depth + 1)}`,
+			(item) =>
+				`${"    ".repeat(depth + 1)}${formatParamValue(item, depth + 1)}`,
 		);
 		return `[\n${items.join(",\n")},\n${indent}]`;
 	}

@@ -620,9 +620,11 @@ function extractBlockNameFromBindDecorator(sf: ts.SourceFile): string | null {
 		if (found) return;
 		if (ts.isClassDeclaration(node)) {
 			// TypeScript ≥ 5.0 modifiers array — decorators live in node.modifiers
-			const modifiers = (node as ts.ClassDeclaration & {
-				modifiers?: ts.NodeArray<ts.ModifierLike>;
-			}).modifiers;
+			const modifiers = (
+				node as ts.ClassDeclaration & {
+					modifiers?: ts.NodeArray<ts.ModifierLike>;
+				}
+			).modifiers;
 			const decorators = modifiers?.filter(ts.isDecorator) ?? [];
 			for (const dec of decorators) {
 				if (!ts.isCallExpression(dec.expression)) continue;
