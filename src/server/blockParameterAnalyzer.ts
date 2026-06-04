@@ -26,6 +26,8 @@ export type ParameterFieldType =
 	| "activity-id-array"
 	| "step-id-array"
 	| "string-array"
+	| "uuid"
+	| "uuid-array"
 	| "object"
 	| "unknown";
 
@@ -112,6 +114,18 @@ export function analyzeBlockParameterEditors(
 			schemas[blockName] = { blockName, fields, hasEditor: true };
 		} catch {
 			schemas[blockName] = { blockName, fields: [], hasEditor: true };
+		}
+	}
+
+	// Merge backend Koi schemas — frontend schemas take precedence
+	const backendSchemas = analyzeBackendBlocks(clientSafePath);
+	for (const [blockName, backendSchema] of Object.entries(backendSchemas)) {
+		if (!schemas[blockName]) {
+			// Block only exists in backend — use backend schema
+			schemas[blockName] = backendSchema;
+		} else if (!schemas[blockName].hasEditor && backendSchema.hasEditor) {
+			// Frontend marks no editor but backend has fields — use backend
+			schemas[blockName] = backendSchema;
 		}
 	}
 
@@ -540,4 +554,303 @@ function getZodRootCall(node: ts.Expression): ZodRootCallInfo | null {
 		// Continue unwrapping the chain (go one level inward)
 		current = obj;
 	}
+}
+
+// ─────────────────────────────────────────────────────────────
+// Backend block analyzer — reads Koi parameter schemas
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Scans the backend serviceWorkflow blocks directory and extracts Koi
+ * parameter schemas for every block that declares a `parametersSchema`.
+ * Results are merged into the main schema map by `analyzeBlockParameterEditors`
+ * (frontend schemas take precedence when both exist).
+ */
+export function analyzeBackendBlocks(
+	clientSafePath: string,
+): BlockParameterSchemas {
+	const blocksDir = path.join(
+		clientSafePath,
+		"src",
+		"backend",
+		"contexts",
+		"serviceWorkflow",
+		"blocks",
+	);
+	if (!fs.existsSync(blocksDir)) return {};
+
+	const schemas: BlockParameterSchemas = {};
+	const SKIP = new Set(["block.ts", "baseBlock.ts", "blockFactory.ts"]);
+
+	for (const file of fs.readdirSync(blocksDir)) {
+		if (!file.endsWith(".ts") || SKIP.has(file)) continue;
+		const filePath = path.join(blocksDir, file);
+		try {
+			const source = fs.readFileSync(filePath, "utf-8");
+			const sf = ts.createSourceFile(
+				filePath,
+				source,
+				ts.ScriptTarget.ES2022,
+				/* setParentNodes */ true,
+			);
+
+			const blockName = extractBlockNameFromBindDecorator(sf);
+			if (!blockName) continue;
+
+			const fields = extractKoiParameterFields(sf);
+			if (fields === null) continue; // no parametersSchema declaration found
+
+			schemas[blockName] = {
+				blockName,
+				fields,
+				hasEditor: fields.length > 0,
+			};
+		} catch {
+			// skip files that fail to parse
+		}
+	}
+	return schemas;
+}
+
+/** Extract the block name from `@bindBlockName(BlockName.xxx)` */
+function extractBlockNameFromBindDecorator(sf: ts.SourceFile): string | null {
+	let found: string | null = null;
+
+	function visit(node: ts.Node): void {
+		if (found) return;
+		if (ts.isClassDeclaration(node)) {
+			// TypeScript ≥ 5.0 modifiers array — decorators live in node.modifiers
+			const modifiers = (node as ts.ClassDeclaration & {
+				modifiers?: ts.NodeArray<ts.ModifierLike>;
+			}).modifiers;
+			const decorators = modifiers?.filter(ts.isDecorator) ?? [];
+			for (const dec of decorators) {
+				if (!ts.isCallExpression(dec.expression)) continue;
+				const call = dec.expression;
+				if (
+					ts.isIdentifier(call.expression) &&
+					call.expression.text === "bindBlockName" &&
+					call.arguments.length > 0
+				) {
+					const arg = call.arguments[0];
+					if (
+						ts.isPropertyAccessExpression(arg) &&
+						ts.isIdentifier(arg.expression) &&
+						arg.expression.text === "BlockName"
+					) {
+						found = arg.name.text;
+					}
+				}
+			}
+		}
+		if (!found) ts.forEachChild(node, visit);
+	}
+	visit(sf);
+	return found;
+}
+
+/** Find `const parametersSchema = Koi.object({...})` and return its fields */
+function extractKoiParameterFields(
+	sf: ts.SourceFile,
+): BlockParameterField[] | null {
+	let result: BlockParameterField[] | null = null;
+
+	function visit(node: ts.Node): void {
+		if (result) return;
+		if (
+			ts.isVariableDeclaration(node) &&
+			ts.isIdentifier(node.name) &&
+			node.name.text === "parametersSchema" &&
+			node.initializer
+		) {
+			const obj = findKoiObjectArg(node.initializer);
+			if (obj) {
+				result = obj.properties
+					.filter(ts.isPropertyAssignment)
+					.filter((p) => ts.isIdentifier(p.name))
+					.map((p) => {
+						const key = (p.name as ts.Identifier).text;
+						const info = classifyKoiExpression(p.initializer, key);
+						return { key, ...info };
+					});
+			}
+		}
+		ts.forEachChild(node, visit);
+	}
+	visit(sf);
+	return result;
+}
+
+/** Find the first `Koi.object({...})` call reachable from `node` */
+function findKoiObjectArg(
+	node: ts.Expression,
+): ts.ObjectLiteralExpression | null {
+	// Unwrap awaits: `await Koi.object({...})` shouldn't appear but be safe
+	let current: ts.Expression = node;
+	while (ts.isAwaitExpression(current)) current = current.expression;
+
+	if (
+		ts.isCallExpression(current) &&
+		ts.isPropertyAccessExpression(current.expression) &&
+		ts.isIdentifier(current.expression.expression) &&
+		current.expression.expression.text === "Koi" &&
+		current.expression.name.text === "object" &&
+		current.arguments.length > 0 &&
+		ts.isObjectLiteralExpression(current.arguments[0])
+	) {
+		return current.arguments[0] as ts.ObjectLiteralExpression;
+	}
+	return null;
+}
+
+interface KoiFieldInfo {
+	type: ParameterFieldType;
+	enumValues?: string[];
+	required: boolean;
+}
+
+/** Classify the Koi schema chain for one object property. */
+function classifyKoiExpression(
+	node: ts.Expression,
+	fieldName: string,
+): KoiFieldInfo {
+	// Collect all method calls in the chain (outermost first)
+	const chain = collectKoiMethodChain(node);
+	const methodNames = chain.map((m) => m.name);
+	const isOptional = methodNames.includes("optional");
+	const required = !isOptional;
+
+	// Find .valid(...) call for enum values
+	const validEntry = chain.find((m) => m.name === "valid");
+	const validValues = validEntry ? extractKoiValidValues(validEntry.args) : [];
+
+	// Root method is the last in the chain (innermost call)
+	const rootMethod = chain.at(-1)?.name ?? "unknown";
+	const rootObject = chain.at(-1)?.calledOn ?? "unknown";
+
+	// ── Koi.string() ────────────────────────────────────────
+	if (rootMethod === "string" && rootObject === "Koi") {
+		if (methodNames.includes("uuid")) {
+			return uuidFieldByName(fieldName, required);
+		}
+		if (validValues.length > 0) {
+			return { type: "enum", enumValues: validValues, required };
+		}
+		return { type: "string", required };
+	}
+
+	// ── Koi.number() ────────────────────────────────────────
+	if (rootMethod === "number" && rootObject === "Koi") {
+		return { type: "number", required };
+	}
+
+	// ── Koi.boolean() ───────────────────────────────────────
+	if (rootMethod === "boolean" && rootObject === "Koi") {
+		return { type: "boolean", required };
+	}
+
+	// ── Koi.array().items(...) ───────────────────────────────
+	if (rootMethod === "array" && rootObject === "Koi") {
+		const itemsEntry = chain.find((m) => m.name === "items");
+		if (itemsEntry && itemsEntry.args.length > 0) {
+			const innerInfo = classifyKoiExpression(itemsEntry.args[0], fieldName);
+			switch (innerInfo.type) {
+				case "activity-id":
+					return { type: "activity-id-array", required };
+				case "step-id":
+					return { type: "step-id-array", required };
+				case "uuid":
+					return { type: "uuid-array", required };
+				case "string":
+					return { type: "string-array", required };
+				case "enum":
+					return { type: "string-array", required };
+				default:
+					return { type: "unknown", required };
+			}
+		}
+		return { type: "string-array", required };
+	}
+
+	// ── Koi.koi().enum(...) ─────────────────────────────────
+	// The chain starts with Koi.koi() and has an enum() call
+	if (methodNames.includes("enum")) {
+		if (validValues.length > 0) {
+			return { type: "enum", enumValues: validValues, required };
+		}
+		return { type: "enum", enumValues: [], required };
+	}
+
+	// ── Koi.object() ────────────────────────────────────────
+	if (rootMethod === "object" && rootObject === "Koi") {
+		return { type: "object", required };
+	}
+
+	// ── Koi.any() ───────────────────────────────────────────
+	if (rootMethod === "any") {
+		return { type: "unknown", required };
+	}
+
+	// ── Koi.alternatives() ──────────────────────────────────
+	if (rootMethod === "alternatives") {
+		return { type: "unknown", required };
+	}
+
+	return { type: "unknown", required };
+}
+
+function uuidFieldByName(fieldName: string, required: boolean): KoiFieldInfo {
+	const lower = fieldName.toLowerCase();
+	if (lower.includes("activity")) return { type: "activity-id", required };
+	if (lower.includes("step")) return { type: "step-id", required };
+	return { type: "uuid", required };
+}
+
+interface KoiMethodCall {
+	name: string;
+	calledOn: string; // identifier text of the immediate receiver, or 'call'
+	args: ts.Expression[];
+}
+
+/**
+ * Walk the method-call chain and return calls from innermost to outermost.
+ * e.g. `Koi.string().uuid().required()` → [{name:'string',calledOn:'Koi',...}, {name:'uuid',...}, {name:'required',...}]
+ */
+function collectKoiMethodChain(node: ts.Expression): KoiMethodCall[] {
+	const calls: KoiMethodCall[] = [];
+	let current: ts.Expression = node;
+
+	while (ts.isCallExpression(current)) {
+		const expr = current.expression;
+		if (!ts.isPropertyAccessExpression(expr)) break;
+
+		const methodName = expr.name.text;
+		const receiver = expr.expression;
+		const calledOn = ts.isIdentifier(receiver)
+			? receiver.text
+			: ts.isCallExpression(receiver)
+				? "call"
+				: "other";
+
+		calls.unshift({
+			name: methodName,
+			calledOn,
+			args: Array.from(current.arguments),
+		});
+		current = receiver;
+	}
+
+	return calls;
+}
+
+function extractKoiValidValues(args: ts.Expression[]): string[] {
+	return args.flatMap((arg) => {
+		// Spread: ...someArray  — skip
+		if (ts.isSpreadElement(arg)) return [];
+		// String literal: 'days'
+		if (ts.isStringLiteral(arg)) return [arg.text];
+		// Enum member access: CustomControlCode.OSASConsult → 'OSASConsult'
+		if (ts.isPropertyAccessExpression(arg)) return [arg.name.text];
+		return [];
+	});
 }

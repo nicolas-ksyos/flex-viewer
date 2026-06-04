@@ -529,6 +529,8 @@ export function App() {
 			{showAddBlock && isEditMode && currentWorkflow && (
 				<AddBlockModal
 					existingSteps={currentWorkflow.workflow.steps}
+					allActivities={currentWorkflow.workflow.activities}
+					blockParameterSchemas={blockParameterSchemas}
 					onAdd={(draft) => {
 						addNewStep(draft);
 						// Wire prevStepIds → connections from those steps TO the new block

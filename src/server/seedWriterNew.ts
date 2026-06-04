@@ -228,6 +228,11 @@ function generateStepCode(
 		lines.push(`${PI}performerNeedsTask: true,`);
 	}
 
+	// parameters — emit if provided
+	if (f.parameters && Object.keys(f.parameters).length > 0) {
+		lines.push(`${PI}parameters: ${formatParamObject(f.parameters, 2)},`);
+	}
+
 	// nextStepIds / synchronousNextStepIds are intentionally NOT inlined here.
 	// App.tsx creates explicit NewConnectionDraft entries for them, which are
 	// written via appendToNextStepsArray after the step is inserted. Inlining
@@ -533,4 +538,42 @@ function detectIndent(source: string, obj: ts.ObjectLiteralExpression): string {
 	const lineStart = source.lastIndexOf("\n", firstStart) + 1;
 	const match = source.slice(lineStart).match(/^(\s+)/);
 	return match ? match[1] : "        ";
+}
+
+// ─────────────────────────────────────────────────────────────
+// Parameter object formatting
+// ─────────────────────────────────────────────────────────────
+
+function formatParamObject(
+	obj: Record<string, unknown>,
+	depth: number,
+): string {
+	const indent = "    ".repeat(depth);
+	const inner = "    ".repeat(depth + 1);
+	const entries = Object.entries(obj);
+	if (entries.length === 0) return "{}";
+	const lines = entries.map(([k, v]) => `${inner}${k}: ${formatParamValue(v, depth + 1)}`);
+	return `{\n${lines.join(",\n")},\n${indent}}`;
+}
+
+function formatParamValue(v: unknown, depth: number): string {
+	if (v === null) return "null";
+	if (typeof v === "string") {
+		const escaped = v.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+		return `'${escaped}'`;
+	}
+	if (typeof v === "number") return String(v);
+	if (typeof v === "boolean") return v ? "true" : "false";
+	if (Array.isArray(v)) {
+		if (v.length === 0) return "[]";
+		const indent = "    ".repeat(depth);
+		const items = v.map(
+			(item) => `${"    ".repeat(depth + 1)}${formatParamValue(item, depth + 1)}`,
+		);
+		return `[\n${items.join(",\n")},\n${indent}]`;
+	}
+	if (typeof v === "object" && v !== null) {
+		return formatParamObject(v as Record<string, unknown>, depth);
+	}
+	return JSON.stringify(v);
 }

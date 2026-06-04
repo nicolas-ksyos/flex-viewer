@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import type { ParsedWorkflowStep, NewStepDraft } from "../../../shared/types";
+import type {
+	ParsedWorkflowStep,
+	ParsedWorkflowActivity,
+	NewStepDraft,
+	BlockParameterSchemas,
+} from "../../../shared/types";
 import { BLOCK_NAMES } from "../../../shared/blockTypes";
 import { generateVariableName } from "../../hooks/useEditMode";
+import { ParameterEditor } from "./ParameterEditor";
 
 // ─────────────────────────────────────────────────────────────
 // Props
@@ -9,6 +15,8 @@ import { generateVariableName } from "../../hooks/useEditMode";
 
 interface AddBlockModalProps {
 	existingSteps: ParsedWorkflowStep[];
+	allActivities?: ParsedWorkflowActivity[];
+	blockParameterSchemas?: BlockParameterSchemas;
 	onAdd: (draft: Omit<NewStepDraft, "kind">) => void;
 	onCancel: () => void;
 }
@@ -161,6 +169,8 @@ function StepCheckboxList({
 
 export function AddBlockModal({
 	existingSteps,
+	allActivities = [],
+	blockParameterSchemas,
 	onAdd,
 	onCancel,
 }: AddBlockModalProps) {
@@ -174,8 +184,14 @@ export function AddBlockModal({
 	const [prevStepIds, setPrevStepIds] = useState<string[]>([]);
 	const [nextStepIds, setNextStepIds] = useState<string[]>([]);
 	const [syncNextStepIds, setSyncNextStepIds] = useState<string[]>([]);
+	const [parameters, setParameters] = useState<Record<string, unknown>>({});
 	// Track whether the user has manually overridden the auto-position
 	const [hasManuallySetPos, setHasManuallySetPos] = useState(false);
+
+	// Reset parameters when block type changes
+	useEffect(() => {
+		setParameters({});
+	}, [blockType]);
 
 	// Auto-position: when exactly one prev step is selected, suggest x+1, y
 	useEffect(() => {
@@ -214,6 +230,8 @@ export function AddBlockModal({
 				nextStepIds: nextStepIds.length > 0 ? nextStepIds : undefined,
 				synchronousNextStepIds:
 					syncNextStepIds.length > 0 ? syncNextStepIds : undefined,
+				parameters:
+					Object.keys(parameters).length > 0 ? parameters : undefined,
 			},
 			variableName: varName,
 		});
@@ -424,7 +442,23 @@ export function AddBlockModal({
 					</label>
 				</div>
 
-				{/* ── Section 4: Connections ── */}
+				{/* ── Section 4: Parameters (schema-driven, shown when block type has known parameters) ── */}
+				{blockType &&
+					blockParameterSchemas?.[blockType]?.hasEditor &&
+					blockParameterSchemas[blockType].fields.length > 0 && (
+						<div style={sectionStyle}>
+							<p style={sectionHeadingStyle}>Parameters</p>
+							<ParameterEditor
+								fields={blockParameterSchemas[blockType].fields}
+								parameters={parameters}
+								allSteps={existingSteps}
+								allActivities={allActivities}
+								onChange={setParameters}
+							/>
+						</div>
+					)}
+
+				{/* ── Section 5: Connections ── */}
 				<div style={sectionStyle}>
 					<p style={sectionHeadingStyle}>Connections</p>
 

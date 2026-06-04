@@ -135,6 +135,8 @@ export type ParameterFieldType =
 	| "activity-id-array"
 	| "step-id-array"
 	| "string-array" // z.array(z.string())
+	| "uuid" // generic UUID (not specifically activity/step)
+	| "uuid-array" // generic UUID array
 	| "object" // nested z.strictObject / complex
 	| "unknown";
 
@@ -202,6 +204,8 @@ export interface NewStepFields {
 	prevStepIds?: string[];
 	/** IDs of existing steps this step connects TO synchronously */
 	synchronousNextStepIds?: string[];
+	/** Initial parameters for the new step */
+	parameters?: Record<string, unknown> | null;
 }
 
 /** A new step pending to be added to the workflow */
