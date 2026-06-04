@@ -21,7 +21,6 @@ import { ConnectionEditModal } from "./ConnectionEditModal";
 import type { ConnectionEditResult } from "./ConnectionEditModal";
 import { AddConnectionModal } from "./AddConnectionModal";
 
-
 // ─────────────────────────────────────────────────────────────
 // Grid / block sizing constants
 // ─────────────────────────────────────────────────────────────
@@ -122,7 +121,7 @@ interface ConnectionDragState {
 	fromStepId: string;
 	fromPixelX: number; // start point on source block edge
 	fromPixelY: number;
-	currentX: number;   // cursor position in canvas-local px
+	currentX: number; // cursor position in canvas-local px
 	currentY: number;
 	hoverTargetId: string | null; // step under cursor (if any)
 }
@@ -159,9 +158,14 @@ export interface EditableWorkflowCanvasProps {
 	/** Called when a new connection is created (from the popover or drag) */
 	onAddConnectionDraft?: (draft: Omit<NewConnectionDraft, "kind">) => void;
 	/** Called when a disable-transition is added (from context menu edit) */
-	onAddTransitionDraft?: (draft: Omit<import("../../../shared/types").NewTransitionDraft, "kind">) => void;
+	onAddTransitionDraft?: (
+		draft: Omit<import("../../../shared/types").NewTransitionDraft, "kind">,
+	) => void;
 	/** Called when user clicks a transition line in edit mode */
-	onTransitionClick?: (transition: ParsedWorkflowTransition, pos: { x: number; y: number }) => void;
+	onTransitionClick?: (
+		transition: ParsedWorkflowTransition,
+		pos: { x: number; y: number },
+	) => void;
 	/** Called when the trash icon is clicked to mark a block for deletion */
 	onDeleteBlock?: (step: ParsedWorkflowStep) => void;
 	/** Called when the undo icon is clicked to cancel a pending deletion */
@@ -848,7 +852,10 @@ interface TransitionLinesProps {
 	/** "fromId-toId" keys for connections pending removal */
 	removedConnectionKeys: Set<string>;
 	/** Called when the user clicks a transition line */
-	onTransitionClick?: (t: ParsedWorkflowTransition, pos: { x: number; y: number }) => void;
+	onTransitionClick?: (
+		t: ParsedWorkflowTransition,
+		pos: { x: number; y: number },
+	) => void;
 }
 
 function TransitionLines({
@@ -1033,21 +1040,27 @@ function TransitionLines({
 									y: e.clientY - svgRect.top,
 								});
 							}
-					  }
+						}
 					: undefined;
 
 				return (
 					<g key={t.id}>
 						{/* Visible line */}
 						<line
-							x1={x1} y1={y1} x2={x2} y2={y2}
+							x1={x1}
+							y1={y1}
+							x2={x2}
+							y2={y2}
 							{...lineAttrs}
 							style={{ pointerEvents: "none" }}
 						/>
 						{/* Wide invisible hit-area for easier clicking */}
 						{handleLineClick && (
 							<line
-								x1={x1} y1={y1} x2={x2} y2={y2}
+								x1={x1}
+								y1={y1}
+								x2={x2}
+								y2={y2}
 								stroke="transparent"
 								strokeWidth={14}
 								style={{ pointerEvents: "stroke", cursor: "pointer" }}
@@ -1263,10 +1276,22 @@ export function EditableWorkflowCanvas({
 		const cy = pixelY + BLOCK_HEIGHT / 2;
 		let startX = cx;
 		let startY = cy;
-		if (side === "right") { startX = pixelX + BLOCK_WIDTH; startY = cy; }
-		if (side === "left") { startX = pixelX; startY = cy; }
-		if (side === "top") { startX = cx; startY = pixelY; }
-		if (side === "bottom") { startX = cx; startY = pixelY + BLOCK_HEIGHT; }
+		if (side === "right") {
+			startX = pixelX + BLOCK_WIDTH;
+			startY = cy;
+		}
+		if (side === "left") {
+			startX = pixelX;
+			startY = cy;
+		}
+		if (side === "top") {
+			startX = cx;
+			startY = pixelY;
+		}
+		if (side === "bottom") {
+			startX = cx;
+			startY = pixelY + BLOCK_HEIGHT;
+		}
 		setConnectionDrag({
 			fromStepId: step.id,
 			fromPixelX: startX,
@@ -1303,7 +1328,12 @@ export function EditableWorkflowCanvas({
 			});
 			setConnectionDrag((prev) =>
 				prev
-					? { ...prev, currentX: canvasX, currentY: canvasY, hoverTargetId: targetStep?.id ?? null }
+					? {
+							...prev,
+							currentX: canvasX,
+							currentY: canvasY,
+							hoverTargetId: targetStep?.id ?? null,
+						}
 					: null,
 			);
 		};
@@ -1324,7 +1354,7 @@ export function EditableWorkflowCanvas({
 			window.removeEventListener("mousemove", handleMouseMove);
 			window.removeEventListener("mouseup", handleMouseUp);
 		};
-	// eslint-disable-next-line react-hooks/exhaustive-deps
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [connectionDrag?.fromStepId, zoom]);
 
 	if (workflow.steps.length === 0) {
@@ -1389,213 +1419,225 @@ export function EditableWorkflowCanvas({
 	// App-level wrapper (spacer + CSS scale) so scrollbars are always correct.
 	return (
 		<>
-		<div
-			ref={canvasInnerRef}
-			className={`editable-canvas${isDraggingAny ? " canvas--dragging" : ""}`}
-			style={{ position: "relative", width: canvasWidth, height: canvasHeight }}
-		>
-			{/* SVG transition lines sit below the block layer */}
-			<TransitionLines
-				transitions={workflow.transitions}
-				centerMap={centerMap}
-				canvasWidth={canvasWidth}
-				canvasHeight={canvasHeight}
-				deletedStepIds={deletedStepIds}
-				removedConnectionKeys={removedConnectionKeys}
-				onTransitionClick={!readOnly ? handleTransitionClick : undefined}
-			/>
-
-			{/* Block layer */}
-			{stepPositions.map(({ step, pixelX, pixelY }) => (
-				<WorkflowBlock
-					key={step.id}
-					step={step}
-					pixelX={pixelX}
-					pixelY={pixelY}
-					isDragging={activeDraggingStepId === step.id}
-					isHovered={hoveredStepId === step.id}
-					isHighlighted={highlightedStepId === step.id}
-					isDeleted={deletedStepIds.has(step.id)}
-					isImpacted={impactedStepIds.has(step.id)}
-					readOnly={readOnly}
-					onMouseDown={(e) => handleBlockMouseDown(e, step)}
-					onMouseEnter={() => setHoveredStepId(step.id)}
-					onMouseLeave={() => setHoveredStepId(null)}
-					onInfoIconClick={() => {
-						setOpenPopoverStepId((prev) => (prev === step.id ? null : step.id));
-						onInfoIconClick?.(step);
-					}}
-					onDeleteClick={onDeleteBlock ? () => onDeleteBlock(step) : undefined}
-					onUndoClick={
-						onUndoDeleteBlock ? () => onUndoDeleteBlock(step.id) : undefined
-					}
-					onConnectionHandleMouseDown={
-						!readOnly && !deletedStepIds.has(step.id)
-							? (e, side) => handleConnectionHandleMouseDown(e, step, side)
-							: undefined
-					}
+			<div
+				ref={canvasInnerRef}
+				className={`editable-canvas${isDraggingAny ? " canvas--dragging" : ""}`}
+				style={{
+					position: "relative",
+					width: canvasWidth,
+					height: canvasHeight,
+				}}
+			>
+				{/* SVG transition lines sit below the block layer */}
+				<TransitionLines
+					transitions={workflow.transitions}
+					centerMap={centerMap}
+					canvasWidth={canvasWidth}
+					canvasHeight={canvasHeight}
+					deletedStepIds={deletedStepIds}
+					removedConnectionKeys={removedConnectionKeys}
+					onTransitionClick={!readOnly ? handleTransitionClick : undefined}
 				/>
-			))}
 
-			{/* Settings popover — rendered at canvas level to avoid block clipping */}
-			{openPopoverStepId &&
-				(() => {
-					const popStep = workflow.steps.find(
-						(s) => s.id === openPopoverStepId,
-					);
-					if (!popStep) return null;
-					const pending = editChanges(pendingChanges).find(
-						(c) => c.stepId === popStep.id,
-					);
-					const { pixelX, pixelY } = effectivePosition(
-						popStep,
-						pendingChanges,
-						null,
-						null,
-					);
-					return (
-						<BlockSettingsPopover
-							step={popStep}
-							pendingFields={pending?.fields ?? {}}
-							onFieldChange={(field, value) =>
-								onInfoFieldChange?.(
-									popStep,
-									field,
-									value as string | number | null,
-								)
-							}
-							onClose={() => setOpenPopoverStepId(null)}
-							position={{ top: pixelY, left: pixelX + BLOCK_WIDTH + 8 }}
-							allSteps={workflow.steps}
-							allTransitions={workflow.transitions}
-							onAddConnection={onAddConnectionDraft}
-							onRemoveConnection={onRemoveConnection}
-							onUndoRemoveConnection={onUndoRemoveConnection}
-							pendingRemovedConnectionKeys={removedConnectionKeys}
-							blockParameterSchema={
-								blockParameterSchemas?.[popStep.serviceWorkflowBlock.name]
+				{/* Block layer */}
+				{stepPositions.map(({ step, pixelX, pixelY }) => (
+					<WorkflowBlock
+						key={step.id}
+						step={step}
+						pixelX={pixelX}
+						pixelY={pixelY}
+						isDragging={activeDraggingStepId === step.id}
+						isHovered={hoveredStepId === step.id}
+						isHighlighted={highlightedStepId === step.id}
+						isDeleted={deletedStepIds.has(step.id)}
+						isImpacted={impactedStepIds.has(step.id)}
+						readOnly={readOnly}
+						onMouseDown={(e) => handleBlockMouseDown(e, step)}
+						onMouseEnter={() => setHoveredStepId(step.id)}
+						onMouseLeave={() => setHoveredStepId(null)}
+						onInfoIconClick={() => {
+							setOpenPopoverStepId((prev) =>
+								prev === step.id ? null : step.id,
+							);
+							onInfoIconClick?.(step);
+						}}
+						onDeleteClick={
+							onDeleteBlock ? () => onDeleteBlock(step) : undefined
 						}
-						allActivities={allActivities ?? []}
-						onParametersChange={
-							onParametersChange
-								? (params) => onParametersChange(popStep, params)
+						onUndoClick={
+							onUndoDeleteBlock ? () => onUndoDeleteBlock(step.id) : undefined
+						}
+						onConnectionHandleMouseDown={
+							!readOnly && !deletedStepIds.has(step.id)
+								? (e, side) => handleConnectionHandleMouseDown(e, step, side)
 								: undefined
 						}
 					/>
-				);
-				})()}
+				))}
 
-			{/* Connection context menu — opened when user clicks a line */}
-			{contextMenu && (
-				<ConnectionContextMenu
-					transition={contextMenu.transition}
-					position={contextMenu.pos}
-					allSteps={workflow.steps}
-					onEdit={() => {
-						setEditingTransition(contextMenu.transition);
-						setContextMenu(null);
-					}}
-					onDelete={() => {
-						const t = contextMenu.transition;
-						const fromStep = workflow.steps.find((s) => s.id === t.fromStepId);
-						const toStep = workflow.steps.find((s) => s.id === t.toStepId);
-						onRemoveConnection?.({
-							tempId: `rm-click-${t.id}`,
-							fromStepId: t.fromStepId,
-							fromStepName: fromStep?.name ?? t.fromStepId,
-							fromVariableName: fromStep?.variableName ?? "",
-							toStepId: t.toStepId,
-							toStepName: toStep?.name ?? t.toStepId,
-							toVariableName: toStep?.variableName ?? "",
-							synchronous: t.synchronous,
-							isDisable: t.type === "disable",
-						});
-						setContextMenu(null);
-					}}
-					onClose={() => setContextMenu(null)}
-				/>
-			)}
+				{/* Settings popover — rendered at canvas level to avoid block clipping */}
+				{openPopoverStepId &&
+					(() => {
+						const popStep = workflow.steps.find(
+							(s) => s.id === openPopoverStepId,
+						);
+						if (!popStep) return null;
+						const pending = editChanges(pendingChanges).find(
+							(c) => c.stepId === popStep.id,
+						);
+						const { pixelX, pixelY } = effectivePosition(
+							popStep,
+							pendingChanges,
+							null,
+							null,
+						);
+						return (
+							<BlockSettingsPopover
+								step={popStep}
+								pendingFields={pending?.fields ?? {}}
+								onFieldChange={(field, value) =>
+									onInfoFieldChange?.(
+										popStep,
+										field,
+										value as string | number | null,
+									)
+								}
+								onClose={() => setOpenPopoverStepId(null)}
+								position={{ top: pixelY, left: pixelX + BLOCK_WIDTH + 8 }}
+								allSteps={workflow.steps}
+								allTransitions={workflow.transitions}
+								onAddConnection={onAddConnectionDraft}
+								onRemoveConnection={onRemoveConnection}
+								onUndoRemoveConnection={onUndoRemoveConnection}
+								pendingRemovedConnectionKeys={removedConnectionKeys}
+								blockParameterSchema={
+									blockParameterSchemas?.[popStep.serviceWorkflowBlock.name]
+								}
+								allActivities={allActivities ?? []}
+								onParametersChange={
+									onParametersChange
+										? (params) => onParametersChange(popStep, params)
+										: undefined
+								}
+							/>
+						);
+					})()}
 
-			{/* Connection edit modal — opened via context menu Edit action */}
-			{editingTransition && (
-				<ConnectionEditModal
-					transition={editingTransition}
-					allSteps={workflow.steps}
-					onSave={(result: ConnectionEditResult) => {
-						onRemoveConnection?.(result.removal);
-						if (result.newConnection) onAddConnectionDraft?.(result.newConnection);
-						if (result.newTransition) onAddTransitionDraft?.(result.newTransition);
-					}}
-					onCancel={() => setEditingTransition(null)}
-				/>
-			)}
-
-			{/* Connection-drag preview line */}
-			{connectionDrag && (
-				<svg
-					style={{
-						position: "absolute",
-						inset: 0,
-						pointerEvents: "none",
-						zIndex: 50,
-						overflow: "visible",
-					}}
-					width={canvasWidth}
-					height={canvasHeight}
-				>
-					<line
-						x1={connectionDrag.fromPixelX}
-						y1={connectionDrag.fromPixelY}
-						x2={connectionDrag.currentX}
-						y2={connectionDrag.currentY}
-						stroke={
-							connectionDrag.hoverTargetId ? "#3b82f6" : "#9ca3af"
-						}
-						strokeWidth={2}
-						strokeDasharray="8 4"
+				{/* Connection context menu — opened when user clicks a line */}
+				{contextMenu && (
+					<ConnectionContextMenu
+						transition={contextMenu.transition}
+						position={contextMenu.pos}
+						allSteps={workflow.steps}
+						onEdit={() => {
+							setEditingTransition(contextMenu.transition);
+							setContextMenu(null);
+						}}
+						onDelete={() => {
+							const t = contextMenu.transition;
+							const fromStep = workflow.steps.find(
+								(s) => s.id === t.fromStepId,
+							);
+							const toStep = workflow.steps.find((s) => s.id === t.toStepId);
+							onRemoveConnection?.({
+								tempId: `rm-click-${t.id}`,
+								fromStepId: t.fromStepId,
+								fromStepName: fromStep?.name ?? t.fromStepId,
+								fromVariableName: fromStep?.variableName ?? "",
+								toStepId: t.toStepId,
+								toStepName: toStep?.name ?? t.toStepId,
+								toVariableName: toStep?.variableName ?? "",
+								synchronous: t.synchronous,
+								isDisable: t.type === "disable",
+							});
+							setContextMenu(null);
+						}}
+						onClose={() => setContextMenu(null)}
 					/>
-					{connectionDrag.hoverTargetId &&
-						(() => {
-							const tgt = workflow.steps.find(
-								(s) => s.id === connectionDrag.hoverTargetId,
-							);
-							if (!tgt) return null;
-							const { pixelX: tx, pixelY: ty } = effectivePosition(
-								tgt,
-								pendingChanges,
-								null,
-								null,
-							);
-							return (
-								<circle
-									cx={tx + BLOCK_WIDTH / 2}
-									cy={ty + BLOCK_HEIGHT / 2}
-									r={8}
-									fill="none"
-									stroke="#3b82f6"
-									strokeWidth={2}
-								/>
-							);
-						})()}
-				</svg>
-			)}
-		</div>
+				)}
 
-		{/* AddConnectionModal via portal so position:fixed works outside
+				{/* Connection edit modal — opened via context menu Edit action */}
+				{editingTransition && (
+					<ConnectionEditModal
+						transition={editingTransition}
+						allSteps={workflow.steps}
+						onSave={(result: ConnectionEditResult) => {
+							onRemoveConnection?.(result.removal);
+							if (result.newConnection)
+								onAddConnectionDraft?.(result.newConnection);
+							if (result.newTransition)
+								onAddTransitionDraft?.(result.newTransition);
+						}}
+						onCancel={() => setEditingTransition(null)}
+					/>
+				)}
+
+				{/* Connection-drag preview line */}
+				{connectionDrag && (
+					<svg
+						style={{
+							position: "absolute",
+							inset: 0,
+							pointerEvents: "none",
+							zIndex: 50,
+							overflow: "visible",
+						}}
+						width={canvasWidth}
+						height={canvasHeight}
+					>
+						<line
+							x1={connectionDrag.fromPixelX}
+							y1={connectionDrag.fromPixelY}
+							x2={connectionDrag.currentX}
+							y2={connectionDrag.currentY}
+							stroke={connectionDrag.hoverTargetId ? "#3b82f6" : "#9ca3af"}
+							strokeWidth={2}
+							strokeDasharray="8 4"
+						/>
+						{connectionDrag.hoverTargetId &&
+							(() => {
+								const tgt = workflow.steps.find(
+									(s) => s.id === connectionDrag.hoverTargetId,
+								);
+								if (!tgt) return null;
+								const { pixelX: tx, pixelY: ty } = effectivePosition(
+									tgt,
+									pendingChanges,
+									null,
+									null,
+								);
+								return (
+									<circle
+										cx={tx + BLOCK_WIDTH / 2}
+										cy={ty + BLOCK_HEIGHT / 2}
+										r={8}
+										fill="none"
+										stroke="#3b82f6"
+										strokeWidth={2}
+									/>
+								);
+							})()}
+					</svg>
+				)}
+			</div>
+
+			{/* AddConnectionModal via portal so position:fixed works outside
 		     the CSS transform applied by CanvasPane */}
-		{pendingConnectionDraft &&
-			createPortal(
-				<AddConnectionModal
-					existingSteps={workflow.steps}
-					existingTransitions={workflow.transitions}
-					onAdd={(draft) => {
-						onAddConnectionDraft?.(draft);
-						setPendingConnectionDraft(null);
-					}}
-					onCancel={() => setPendingConnectionDraft(null)}
-				/>,
-				document.body,
-			)}
+			{pendingConnectionDraft &&
+				createPortal(
+					<AddConnectionModal
+						existingSteps={workflow.steps}
+						existingTransitions={workflow.transitions}
+						initialFromStepId={pendingConnectionDraft.fromStepId}
+						initialToStepIds={[pendingConnectionDraft.toStepId]}
+						onAdd={(draft) => {
+							onAddConnectionDraft?.(draft);
+							setPendingConnectionDraft(null);
+						}}
+						onCancel={() => setPendingConnectionDraft(null)}
+					/>,
+					document.body,
+				)}
 		</>
 	);
 }

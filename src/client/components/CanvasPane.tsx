@@ -59,7 +59,9 @@ export interface CanvasPaneProps {
 	/** Called when user creates a connection from the settings popover */
 	onAddConnectionDraft?: (draft: Omit<NewConnectionDraft, "kind">) => void;
 	/** Called when user creates a disable transition (from context menu edit) */
-	onAddTransitionDraft?: (draft: Omit<import("../../shared/types").NewTransitionDraft, "kind">) => void;
+	onAddTransitionDraft?: (
+		draft: Omit<import("../../shared/types").NewTransitionDraft, "kind">,
+	) => void;
 	/** Block parameter schemas fetched from the server (for typed param editing) */
 	blockParameterSchemas?: BlockParameterSchemas;
 	/** Called when parameters are changed via the typed editor in the popover */
@@ -392,8 +394,12 @@ export function CanvasPane({
 						}
 						onDeleteBlock={mode === "edit" ? onDeleteBlock : undefined}
 						onUndoDeleteBlock={mode === "edit" ? onUndoDeleteBlock : undefined}
-						onRemoveConnection={mode === "edit" ? onRemoveConnection : undefined}
-						onUndoRemoveConnection={mode === "edit" ? onUndoRemoveConnection : undefined}
+						onRemoveConnection={
+							mode === "edit" ? onRemoveConnection : undefined
+						}
+						onUndoRemoveConnection={
+							mode === "edit" ? onUndoRemoveConnection : undefined
+						}
 					/>
 				</div>
 			</div>

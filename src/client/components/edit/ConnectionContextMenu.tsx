@@ -82,9 +82,7 @@ export function ConnectionContextMenu({
 					fontSize: 11,
 				}}
 			>
-				<div
-					style={{ fontWeight: 600, color: "#374151", marginBottom: 2 }}
-				>
+				<div style={{ fontWeight: 600, color: "#374151", marginBottom: 2 }}>
 					{fromStep?.name ?? transition.fromStepId}
 					<span style={{ color: typeColor, margin: "0 6px" }}>→</span>
 					{toStep?.name ?? transition.toStepId}
