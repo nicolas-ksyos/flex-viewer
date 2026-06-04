@@ -1,9 +1,16 @@
 import { useState, useCallback } from "react";
 import type {
-	StepPendingChange,
 	EditableStepFields,
 	ParsedWorkflowStep,
+	ParsedWorkflowDefinition,
+	ParsedWorkflowTransition,
+	PendingChangeItem,
+	StepEditDraft,
+	NewStepDraft,
+	NewConnectionDraft,
+	NewTransitionDraft,
 } from "../../shared/types";
+import { BLOCK_TYPE_MAP } from "../../shared/blockTypes";
 
 // ─────────────────────────────────────────────────────────────
 // Helpers — compare a pending field value against the original
@@ -59,18 +66,118 @@ function pruneMatchingOriginal(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Public helpers — exported for use in components
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Convert a step name to a camelCase TypeScript variable name.
+ * e.g. "Perform some activity" → "performSomeActivityStep"
+ */
+export function generateVariableName(name: string): string {
+	const camel = name
+		.toLowerCase()
+		.replace(/[^a-z0-9\s]/g, "")
+		.trim()
+		.split(/\s+/)
+		.filter(Boolean)
+		.map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+		.join("");
+	return (camel || "new") + "Step";
+}
+
+/**
+ * Merge real parsed workflow with pending new-item drafts so the canvas
+ * can render the full "in-progress" workflow without requiring a save.
+ *
+ * New steps appear at their specified coordinates.
+ * New connections and transitions appear as dashed arrows.
+ */
+export function computeDisplayWorkflow(
+	workflow: ParsedWorkflowDefinition,
+	pendingChanges: PendingChangeItem[],
+): ParsedWorkflowDefinition {
+	const newStepDrafts = pendingChanges.filter(
+		(c): c is NewStepDraft => c.kind === "new-step",
+	);
+	const newConnDrafts = pendingChanges.filter(
+		(c): c is NewConnectionDraft => c.kind === "new-connection",
+	);
+	const newTransDrafts = pendingChanges.filter(
+		(c): c is NewTransitionDraft => c.kind === "new-transition",
+	);
+
+	const newSteps: ParsedWorkflowStep[] = newStepDrafts.map((draft) => ({
+		id: draft.tempId,
+		name: draft.fields.name,
+		label: draft.fields.label ?? draft.fields.name,
+		displayOptions: { x: draft.fields.x, y: draft.fields.y },
+		serviceWorkflowBlock: {
+			id: draft.tempId + "-block",
+			name: draft.fields.block,
+			type: BLOCK_TYPE_MAP[draft.fields.block] ?? "general",
+		},
+		allowedPerformer: draft.fields.allowedPerformer ?? null,
+		parameters: null,
+		performerNeedsTask: draft.fields.performerNeedsTask ?? false,
+		serviceId: workflow.steps[0]?.serviceId ?? "",
+		isRerunnable: false,
+		variableName: draft.variableName,
+		isNew: true,
+	}));
+
+	const allSteps = [...workflow.steps, ...newSteps];
+	const stepById = new Map(allSteps.map((s) => [s.id, s]));
+
+	const newTransitions: ParsedWorkflowTransition[] = [
+		...newConnDrafts.flatMap((draft) =>
+			draft.toStepIds
+				.filter((id) => stepById.has(id))
+				.map((toId) => ({
+					id: `${draft.tempId}-${toId}`,
+					fromStepId: draft.fromStepId,
+					toStepId: toId,
+					type: "enable" as const,
+					onlyIfOutputEquals: null,
+					synchronous: draft.synchronous,
+					serviceId: workflow.steps[0]?.serviceId ?? "",
+					isNew: true,
+				})),
+		),
+		...newTransDrafts.flatMap((draft) =>
+			draft.toStepIds
+				.filter((id) => stepById.has(id))
+				.map((toId) => ({
+					id: `${draft.tempId}-${toId}`,
+					fromStepId: draft.fromStepId,
+					toStepId: toId,
+					type: "disable" as const,
+					onlyIfOutputEquals: null,
+					synchronous: false,
+					serviceId: workflow.steps[0]?.serviceId ?? "",
+					isNew: true,
+				})),
+		),
+	];
+
+	return {
+		...workflow,
+		steps: allSteps,
+		transitions: [...workflow.transitions, ...newTransitions],
+	};
+}
+
+// ─────────────────────────────────────────────────────────────
 // Hook
 // ─────────────────────────────────────────────────────────────
 
 export interface UseEditModeReturn {
 	isEditMode: boolean;
-	pendingChanges: StepPendingChange[];
+	pendingChanges: PendingChangeItem[];
 	enterEditMode: () => void;
 	exitEditMode: () => void;
 	/**
 	 * Record that a block was moved to a new grid cell.
-	 * Accepts the full ParsedWorkflowStep so the hook can auto-prune the entry
-	 * if the new position is identical to the original.
+	 * Auto-prunes the entry if the new position is identical to the original.
 	 */
 	recordBlockMove: (
 		step: ParsedWorkflowStep,
@@ -79,21 +186,29 @@ export interface UseEditModeReturn {
 	) => void;
 	/**
 	 * Record a field edit from the settings popover.
-	 * Accepts the full ParsedWorkflowStep for the same auto-prune reason.
+	 * Auto-prunes if the new value matches the original.
 	 */
 	recordFieldChange: (
 		step: ParsedWorkflowStep,
 		field: keyof EditableStepFields,
 		value: string | number | null | undefined,
 	) => void;
-	/** Remove all pending changes for a specific step. */
+	/** Remove all pending edits for a specific existing step. */
 	removeStepChange: (stepId: string) => void;
+	/** Add a brand-new step draft. */
+	addNewStep: (draft: Omit<NewStepDraft, "kind">) => void;
+	/** Add a new nextSteps connection between steps. */
+	addNewConnection: (draft: Omit<NewConnectionDraft, "kind">) => void;
+	/** Add a new TransitionType.disable link. */
+	addNewTransition: (draft: Omit<NewTransitionDraft, "kind">) => void;
+	/** Remove a new-step / new-connection / new-transition draft by tempId. */
+	removeNewItem: (tempId: string) => void;
 	discardChanges: () => void;
 }
 
 export function useEditMode(): UseEditModeReturn {
 	const [isEditMode, setIsEditMode] = useState(false);
-	const [pendingChanges, setPendingChanges] = useState<StepPendingChange[]>([]);
+	const [pendingChanges, setPendingChanges] = useState<PendingChangeItem[]>([]);
 
 	const exitEditMode = useCallback(() => {
 		setIsEditMode(false);
@@ -103,36 +218,49 @@ export function useEditMode(): UseEditModeReturn {
 	const enterEditMode = useCallback(() => setIsEditMode(true), []);
 
 	/**
-	 * Merge `newFields` into the existing pending change for the given step,
+	 * Merge `newFields` into the existing StepEditDraft for the given step,
 	 * then prune any fields that now match the original step values.
 	 * If nothing differs from the original, the entry is removed entirely.
 	 */
 	const mergeChange = useCallback(
 		(step: ParsedWorkflowStep, newFields: EditableStepFields) => {
 			setPendingChanges((prev) => {
-				const idx = prev.findIndex((c) => c.stepId === step.id);
-				const existingFields = idx >= 0 ? prev[idx].fields : {};
+				// Only look at edit-kind items when merging
+				const idx = prev.findIndex(
+					(c) => c.kind === "edit" && c.stepId === step.id,
+				);
+				const existingFields =
+					idx >= 0 ? (prev[idx] as StepEditDraft).fields : {};
 
-				// Merge new fields on top of existing ones
 				const merged: EditableStepFields = { ...existingFields, ...newFields };
-
-				// Prune fields that are back to their original values
 				const pruned = pruneMatchingOriginal(merged, step);
 
-				// If nothing real remains, remove the entry entirely
 				if (Object.keys(pruned).length === 0) {
-					return prev.filter((c) => c.stepId !== step.id);
+					// No real change remains — drop the entry
+					return prev.filter(
+						(c) => !(c.kind === "edit" && c.stepId === step.id),
+					);
 				}
 
 				if (idx >= 0) {
 					const updated = [...prev];
-					updated[idx] = { ...updated[idx], fields: pruned };
+					updated[idx] = {
+						kind: "edit",
+						stepId: step.id,
+						stepName: step.name,
+						fields: pruned,
+					} satisfies StepEditDraft;
 					return updated;
 				}
 
 				return [
 					...prev,
-					{ stepId: step.id, stepName: step.name, fields: pruned },
+					{
+						kind: "edit",
+						stepId: step.id,
+						stepName: step.name,
+						fields: pruned,
+					} satisfies StepEditDraft,
 				];
 			});
 		},
@@ -156,7 +284,50 @@ export function useEditMode(): UseEditModeReturn {
 
 	const removeStepChange = useCallback(
 		(stepId: string) =>
-			setPendingChanges((prev) => prev.filter((c) => c.stepId !== stepId)),
+			setPendingChanges((prev) =>
+				prev.filter((c) => !(c.kind === "edit" && c.stepId === stepId)),
+			),
+		[],
+	);
+
+	const addNewStep = useCallback(
+		(draft: Omit<NewStepDraft, "kind">) =>
+			setPendingChanges((prev) => [...prev, { kind: "new-step", ...draft }]),
+		[],
+	);
+
+	const addNewConnection = useCallback(
+		(draft: Omit<NewConnectionDraft, "kind">) =>
+			setPendingChanges((prev) => [
+				...prev,
+				{ kind: "new-connection", ...draft },
+			]),
+		[],
+	);
+
+	const addNewTransition = useCallback(
+		(draft: Omit<NewTransitionDraft, "kind">) =>
+			setPendingChanges((prev) => [
+				...prev,
+				{ kind: "new-transition", ...draft },
+			]),
+		[],
+	);
+
+	const removeNewItem = useCallback(
+		(tempId: string) =>
+			setPendingChanges((prev) =>
+				prev.filter((c) => {
+					if (
+						c.kind === "new-step" ||
+						c.kind === "new-connection" ||
+						c.kind === "new-transition"
+					) {
+						return c.tempId !== tempId;
+					}
+					return true;
+				}),
+			),
 		[],
 	);
 
@@ -170,6 +341,10 @@ export function useEditMode(): UseEditModeReturn {
 		recordBlockMove,
 		recordFieldChange,
 		removeStepChange,
+		addNewStep,
+		addNewConnection,
+		addNewTransition,
+		removeNewItem,
 		discardChanges,
 	};
 }

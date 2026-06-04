@@ -5,7 +5,8 @@ import type {
 	ParsedWorkflowDefinition,
 	ParsedWorkflowStep,
 	ParsedWorkflowTransition,
-	StepPendingChange,
+	PendingChangeItem,
+	StepEditDraft,
 	EditableStepFields,
 } from "../../../shared/types";
 import { BlockSettingsPopover } from "./BlockSettingsPopover";
@@ -120,7 +121,7 @@ interface DragState {
 
 export interface EditableWorkflowCanvasProps {
 	workflow: ParsedWorkflowDefinition;
-	pendingChanges: StepPendingChange[];
+	pendingChanges: PendingChangeItem[];
 	/** Fired on mouseup after a drag; caller updates pendingChanges */
 	onBlockMove: (stepId: string, newGridX: number, newGridY: number) => void;
 	/** Called when the 'i' icon is clicked — external notification (optional) */
@@ -143,10 +144,15 @@ export interface EditableWorkflowCanvasProps {
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
+/** Returns edit-kind changes only — used for position and field lookups. */
+function editChanges(pendingChanges: PendingChangeItem[]): StepEditDraft[] {
+	return pendingChanges.filter((c): c is StepEditDraft => c.kind === "edit");
+}
+
 /** Returns the pixel top-left corner of the block (not the cell). */
 function effectivePosition(
 	step: ParsedWorkflowStep,
-	pendingChanges: StepPendingChange[],
+	pendingChanges: PendingChangeItem[],
 	draggingStepId?: string | null,
 	draggingPosition?: { x: number; y: number } | null,
 ): { pixelX: number; pixelY: number } {
@@ -155,7 +161,7 @@ function effectivePosition(
 		return { pixelX: draggingPosition.x, pixelY: draggingPosition.y };
 	}
 	// Otherwise apply pending grid change (or fall back to original)
-	const pending = pendingChanges.find((c) => c.stepId === step.id);
+	const pending = editChanges(pendingChanges).find((c) => c.stepId === step.id);
 	const gx = pending?.fields.x ?? step.displayOptions.x;
 	const gy = pending?.fields.y ?? step.displayOptions.y;
 	return {
@@ -320,9 +326,9 @@ function WorkflowBlock({
 		</div>
 	);
 
-	// 'i' info icon — shown on hover, hidden while dragging or in read-only mode
+	// 'i' info icon — shown on hover, hidden while dragging, read-only, or new blocks
 	const infoIcon =
-		!readOnly && isHovered && !isDragging ? (
+		!readOnly && !step.isNew && isHovered && !isDragging ? (
 			<button
 				onMouseDown={(e) => e.stopPropagation()}
 				onClick={(e) => {
@@ -357,6 +363,28 @@ function WorkflowBlock({
 			</button>
 		) : null;
 
+	// "NEW" badge — shown in top-left corner for draft steps not yet in the file
+	const newBadge = step.isNew ? (
+		<div
+			style={{
+				position: "absolute",
+				top: 3,
+				left: 3,
+				zIndex: 2,
+				background: "#22c55e",
+				color: "white",
+				fontSize: 8,
+				fontWeight: 700,
+				letterSpacing: "0.05em",
+				padding: "1px 4px",
+				borderRadius: 3,
+				pointerEvents: "none",
+			}}
+		>
+			NEW
+		</div>
+	) : null;
+
 	const sharedOuterProps = {
 		style: outerStyle,
 		onMouseDown: readOnly ? undefined : onMouseDown,
@@ -381,7 +409,7 @@ function WorkflowBlock({
 						inset: 0,
 						borderRadius: "50%",
 						backgroundColor: styles.bg,
-						border: `${styles.borderWidth}px solid ${styles.border}`,
+						border: `${styles.borderWidth}px ${step.isNew ? "dashed" : "solid"} ${styles.border}`,
 						// box-shadow respects border-radius, so this produces a circular shadow
 						boxShadow: isDragging
 							? "0 8px 24px rgba(0,0,0,0.18)"
@@ -390,6 +418,7 @@ function WorkflowBlock({
 								: "0 1px 4px rgba(0,0,0,0.08)",
 					}}
 				/>
+				{newBadge}
 				{textContent}
 				{infoIcon}
 			</div>
@@ -430,8 +459,10 @@ function WorkflowBlock({
 						stroke={styles.border}
 						strokeWidth={styles.borderWidth}
 						strokeLinejoin="miter"
+						{...(step.isNew ? { strokeDasharray: "6 3" } : {})}
 					/>
 				</svg>
+				{newBadge}
 				{textContent}
 				{infoIcon}
 			</div>
@@ -448,7 +479,7 @@ function WorkflowBlock({
 					position: "absolute",
 					inset: 0,
 					backgroundColor: styles.bg,
-					border: `${styles.borderWidth}px solid ${styles.border}`,
+					border: `${styles.borderWidth}px ${step.isNew ? "dashed" : "solid"} ${styles.border}`,
 					boxShadow: isDragging
 						? "0 8px 24px rgba(0,0,0,0.18)"
 						: isHighlighted
@@ -456,6 +487,7 @@ function WorkflowBlock({
 							: "0 1px 4px rgba(0,0,0,0.08)",
 				}}
 			/>
+			{newBadge}
 			{textContent}
 			{infoIcon}
 		</div>
@@ -561,6 +593,7 @@ function TransitionLines({
 							fill="none"
 							stroke={strokeColor}
 							strokeWidth={2}
+							{...(t.isNew ? { strokeDasharray: "6 3" } : {})}
 							markerEnd={`url(#${markerId})`}
 						/>
 					);
@@ -604,6 +637,7 @@ function TransitionLines({
 							y2={y2}
 							stroke={strokeColor}
 							strokeWidth={2}
+							{...(t.isNew ? { strokeDasharray: "6 3" } : {})}
 							markerEnd={`url(#${markerId})`}
 						/>
 						{t.onlyIfOutputEquals && (
@@ -738,15 +772,16 @@ export function EditableWorkflowCanvas({
 	}));
 
 	// ── Canvas dimensions (enough to show all blocks + 2 cell padding) ──
+	const edits = editChanges(pendingChanges);
 	const maxGX = Math.max(
 		...workflow.steps.map((s) => {
-			const p = pendingChanges.find((c) => c.stepId === s.id);
+			const p = edits.find((c) => c.stepId === s.id);
 			return p?.fields.x ?? s.displayOptions.x;
 		}),
 	);
 	const maxGY = Math.max(
 		...workflow.steps.map((s) => {
-			const p = pendingChanges.find((c) => c.stepId === s.id);
+			const p = edits.find((c) => c.stepId === s.id);
 			return p?.fields.y ?? s.displayOptions.y;
 		}),
 	);
@@ -821,7 +856,9 @@ export function EditableWorkflowCanvas({
 						(s) => s.id === openPopoverStepId,
 					);
 					if (!popStep) return null;
-					const pending = pendingChanges.find((c) => c.stepId === popStep.id);
+					const pending = editChanges(pendingChanges).find(
+						(c) => c.stepId === popStep.id,
+					);
 					const { pixelX, pixelY } = effectivePosition(
 						popStep,
 						pendingChanges,

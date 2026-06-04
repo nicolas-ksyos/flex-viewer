@@ -20,6 +20,10 @@ import { useEditMode } from "./hooks/useEditMode";
 import { EditSidebar } from "./components/edit/EditSidebar";
 import { CanvasPane } from "./components/CanvasPane";
 import { CloneModal } from "./components/CloneModal";
+import { AddBlockModal } from "./components/edit/AddBlockModal";
+import { AddConnectionModal } from "./components/edit/AddConnectionModal";
+import { AddTransitionModal } from "./components/edit/AddTransitionModal";
+import type { NewStepDraft } from "../shared/types";
 
 function EmptyStateBox({
 	title,
@@ -69,6 +73,9 @@ export function App() {
 	const [showConfig, setShowConfig] = useState(false);
 	const [sidebarVisible, setSidebarVisible] = useState(true);
 	const [showCloneModal, setShowCloneModal] = useState(false);
+	const [showAddBlock, setShowAddBlock] = useState(false);
+	const [showAddConnection, setShowAddConnection] = useState(false);
+	const [showAddTransition, setShowAddTransition] = useState(false);
 	const [highlightedStepId, setHighlightedStepId] = useState<string | null>(
 		null,
 	);
@@ -81,6 +88,10 @@ export function App() {
 		recordBlockMove,
 		recordFieldChange,
 		removeStepChange,
+		addNewStep,
+		addNewConnection,
+		addNewTransition,
+		removeNewItem,
 	} = useEditMode();
 
 	// Derive current workflow early so zoom / clone handlers can use it
@@ -292,6 +303,9 @@ export function App() {
 									}}
 									onClone={() => setShowCloneModal(true)}
 									isEditMode={isEditMode}
+									onAddBlock={() => setShowAddBlock(true)}
+									onAddConnection={() => setShowAddConnection(true)}
+									onAddTransition={() => setShowAddTransition(true)}
 								/>
 
 								{/* Always-visible toggle — lives outside the sidebar so overflow:hidden never clips it */}
@@ -342,6 +356,8 @@ export function App() {
 											onDiscard={handleExitEditMode}
 											onRemoveStepChange={removeStepChange}
 											onStepHover={setHighlightedStepId}
+											onRemoveNewItem={removeNewItem}
+											allSteps={currentWorkflow.workflow.steps}
 										/>
 									)}
 								</div>
@@ -402,6 +418,79 @@ export function App() {
 					onClone={handleClone}
 					onCancel={() => setShowCloneModal(false)}
 					pendingChangesCount={pendingChanges.length}
+				/>
+			)}
+
+			{/* ── Add Block modal ─────────────────────────────────── */}
+			{showAddBlock && isEditMode && currentWorkflow && (
+				<AddBlockModal
+					existingSteps={currentWorkflow.workflow.steps}
+					onAdd={(draft) => {
+						addNewStep(draft);
+						// Wire prevStepIds → connections from those steps TO the new block
+						if (draft.fields.prevStepIds?.length) {
+							draft.fields.prevStepIds.forEach((pid, i) => {
+								addNewConnection({
+									tempId: `new-conn-prev-${Date.now()}-${i}`,
+									fromStepId: pid,
+									toStepIds: [draft.tempId],
+									synchronous: false,
+								});
+							});
+						}
+						// Wire nextStepIds → async connection from new block TO those steps
+						if (draft.fields.nextStepIds?.length) {
+							addNewConnection({
+								tempId: `new-conn-next-${Date.now()}`,
+								fromStepId: draft.tempId,
+								toStepIds: draft.fields.nextStepIds,
+								synchronous: false,
+							});
+						}
+						// Wire synchronousNextStepIds → sync connection from new block TO those steps
+						if (draft.fields.synchronousNextStepIds?.length) {
+							addNewConnection({
+								tempId: `new-conn-sync-${Date.now()}`,
+								fromStepId: draft.tempId,
+								toStepIds: draft.fields.synchronousNextStepIds,
+								synchronous: true,
+							});
+						}
+						setShowAddBlock(false);
+					}}
+					onCancel={() => setShowAddBlock(false)}
+				/>
+			)}
+
+			{/* ── Add Connection modal ────────────────────────────── */}
+			{showAddConnection && isEditMode && currentWorkflow && (
+				<AddConnectionModal
+					existingSteps={currentWorkflow.workflow.steps}
+					existingTransitions={currentWorkflow.workflow.transitions}
+					newStepDrafts={pendingChanges
+						.filter((c): c is NewStepDraft => c.kind === "new-step")
+						.map((c) => ({ tempId: c.tempId, name: c.fields.name }))}
+					onAdd={(draft) => {
+						addNewConnection(draft);
+						setShowAddConnection(false);
+					}}
+					onCancel={() => setShowAddConnection(false)}
+				/>
+			)}
+
+			{/* ── Add Transition modal ────────────────────────────── */}
+			{showAddTransition && isEditMode && currentWorkflow && (
+				<AddTransitionModal
+					existingSteps={currentWorkflow.workflow.steps}
+					existingTransitions={currentWorkflow.workflow.transitions}
+					newStepDrafts={pendingChanges
+						.filter((c): c is NewStepDraft => c.kind === "new-step")
+						.map((c) => ({ tempId: c.tempId, name: c.fields.name }))}
+					onAdd={(draft) => {
+						addNewTransition(draft);
+						setShowAddTransition(false);
+					}}
+					onCancel={() => setShowAddTransition(false)}
 				/>
 			)}
 		</>

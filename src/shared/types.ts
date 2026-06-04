@@ -33,6 +33,10 @@ export interface ParsedWorkflowStep {
 	serviceId: string;
 	isRerunnable: boolean;
 	type?: string;
+	/** TypeScript variable name from the seed file, e.g. 'closeProcessStep' */
+	variableName?: string;
+	/** True for steps created in the editor but not yet saved to the seed file */
+	isNew?: boolean;
 }
 
 export interface ParsedWorkflowStepActivity {
@@ -49,6 +53,8 @@ export interface ParsedWorkflowTransition {
 	onlyIfOutputEquals: string | null;
 	synchronous: boolean;
 	serviceId: string;
+	/** True for transitions created in the editor but not yet saved to the seed file */
+	isNew?: boolean;
 }
 
 export interface ParsedWorkflowDefinition {
@@ -129,9 +135,84 @@ export interface StepPendingChange {
 	fields: EditableStepFields;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Edit-mode creation drafts
+// ─────────────────────────────────────────────────────────────
+
+/** Fields for a brand-new step being created in the editor */
+export interface NewStepFields {
+	block: string;
+	name: string;
+	label?: string;
+	x: number;
+	y: number;
+	allowedPerformer?: string | null;
+	performerNeedsTask?: boolean;
+	/** IDs of existing steps this new step connects TO (nextSteps) */
+	nextStepIds?: string[];
+	/** IDs of existing steps that should connect TO this new step */
+	prevStepIds?: string[];
+	/** IDs of existing steps this step connects TO synchronously */
+	synchronousNextStepIds?: string[];
+}
+
+/** A new step pending to be added to the workflow */
+export interface NewStepDraft {
+	kind: "new-step";
+	/** Client-side temporary ID (not a real DB UUID) */
+	tempId: string;
+	fields: NewStepFields;
+	/** Auto-generated camelCase variable name for the seed file, e.g. 'performSomethingStep' */
+	variableName: string;
+}
+
+/** A new connection (nextSteps link) between existing steps */
+export interface NewConnectionDraft {
+	kind: "new-connection";
+	tempId: string;
+	fromStepId: string;
+	toStepIds: string[];
+	synchronous: boolean;
+}
+
+/** A new TransitionType.disable link from one step to one or more steps */
+export interface NewTransitionDraft {
+	kind: "new-transition";
+	tempId: string;
+	fromStepId: string;
+	toStepIds: string[];
+}
+
+/** An edit to an existing step's fields */
+export interface StepEditDraft {
+	kind: "edit";
+	stepId: string;
+	stepName: string;
+	fields: EditableStepFields;
+}
+
+/**
+ * Union of all pending-change kinds used in edit mode.
+ * Replaces the old flat StepPendingChange[] in the hook state.
+ */
+export type PendingChangeItem =
+	| StepEditDraft
+	| NewStepDraft
+	| NewConnectionDraft
+	| NewTransitionDraft;
+
 /** Body sent to PATCH /api/seeds/:fileName */
 export interface SeedPatchRequest {
 	changes: StepPendingChange[];
+	newSteps?: NewStepDraft[];
+	newConnections?: NewConnectionDraft[];
+	newTransitions?: NewTransitionDraft[];
+	/**
+	 * Variable-name map for all steps in the workflow (existing + new drafts).
+	 * Required when newSteps / newConnections / newTransitions are present so
+	 * the server can resolve stepId → variableName for nextSteps references.
+	 */
+	stepVarNames?: Array<{ id: string; variableName: string }>;
 }
 
 /** Response from PATCH /api/seeds/:fileName */

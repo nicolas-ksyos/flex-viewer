@@ -62,6 +62,7 @@ interface WorkflowStep {
 	serviceId: string;
 	serviceWorkflowBlock: { id: string; name: string; type: string };
 	type?: string;
+	variableName?: string;
 }
 
 interface WorkflowStepActivity {
@@ -562,6 +563,7 @@ export function parseSeedFile(
 						wf.steps.push(result.step);
 						stepsById.set(result.step.id, result.step);
 						if (varName) {
+							result.step.variableName = varName;
 							stepVarToId.set(varName, result.step.id);
 							variables.set(varName, result.step);
 						}

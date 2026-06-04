@@ -1,5 +1,9 @@
 import type React from "react";
-import type { ParsedWorkflowStep, StepPendingChange } from "../../shared/types";
+import type {
+	ParsedWorkflowStep,
+	PendingChangeItem,
+	StepEditDraft,
+} from "../../shared/types";
 
 // ─────────────────────────────────────────────────────────────
 // Zoom constants — exported so App.tsx can reuse them
@@ -18,18 +22,21 @@ const CELL_HEIGHT = 130;
 
 export function computeCanvasSize(
 	steps: ParsedWorkflowStep[],
-	pendingChanges: StepPendingChange[],
+	pendingChanges: PendingChangeItem[],
 ): { width: number; height: number } {
 	if (steps.length === 0) return { width: 440, height: 260 };
+	const edits = pendingChanges.filter(
+		(c): c is StepEditDraft => c.kind === "edit",
+	);
 	const maxGX = Math.max(
 		...steps.map((s) => {
-			const p = pendingChanges.find((c) => c.stepId === s.id);
+			const p = edits.find((c) => c.stepId === s.id);
 			return p?.fields.x ?? s.displayOptions.x;
 		}),
 	);
 	const maxGY = Math.max(
 		...steps.map((s) => {
-			const p = pendingChanges.find((c) => c.stepId === s.id);
+			const p = edits.find((c) => c.stepId === s.id);
 			return p?.fields.y ?? s.displayOptions.y;
 		}),
 	);

@@ -5,6 +5,7 @@ import { readConfig } from "../config.js";
 import { discoverSeedFiles } from "../seedDiscovery.js";
 import { parseSeedFile, getSeedRelativePath } from "../seedAstParser.js";
 import { patchSeedFile } from "../seedWriter.js";
+import { appendNewItemsToSeedFile } from "../seedWriterNew.js";
 import type { SeedPatchRequest } from "../../shared/types.js";
 
 const router = Router();
@@ -66,7 +67,8 @@ router.patch("/seeds/:fileName", (req, res) => {
 		return;
 	}
 
-	const { changes } = req.body as SeedPatchRequest;
+	const body = req.body as SeedPatchRequest;
+	const changes = body.changes;
 	if (!Array.isArray(changes)) {
 		res.status(400).json({ error: "Missing or invalid changes array" });
 		return;
@@ -81,7 +83,35 @@ router.patch("/seeds/:fileName", (req, res) => {
 	);
 
 	try {
-		patchSeedFile(filePath, changes);
+		// 1. Apply edits to existing steps
+		if (changes.length > 0) {
+			patchSeedFile(filePath, changes);
+		}
+
+		// 2. Append new steps / connections / transitions
+		const hasNewItems =
+			(body.newSteps && body.newSteps.length > 0) ||
+			(body.newConnections && body.newConnections.length > 0) ||
+			(body.newTransitions && body.newTransitions.length > 0);
+
+		if (hasNewItems) {
+			// Build stepId → variableName map from client-supplied data
+			const stepVarNames = new Map<string, string>();
+			for (const entry of body.stepVarNames ?? []) {
+				if (entry.variableName) {
+					stepVarNames.set(entry.id, entry.variableName);
+				}
+			}
+
+			appendNewItemsToSeedFile(
+				filePath,
+				body.newSteps ?? [],
+				body.newConnections ?? [],
+				body.newTransitions ?? [],
+				stepVarNames,
+			);
+		}
+
 		res.json({ success: true });
 	} catch (err) {
 		res

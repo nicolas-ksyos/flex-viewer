@@ -3,7 +3,7 @@ import type {
 	ParsedWorkflowDefinition,
 	ParsedWorkflowStep,
 	EditableStepFields,
-	StepPendingChange,
+	PendingChangeItem,
 } from "../../shared/types";
 import { EditableWorkflowCanvas } from "./edit/EditableWorkflowCanvas";
 import {
@@ -13,7 +13,9 @@ import {
 	MIN_ZOOM,
 	MAX_ZOOM,
 } from "./CanvasToolbar";
+import { computeDisplayWorkflow } from "../hooks/useEditMode";
 import { WorkflowLegend } from "./WorkflowLegend";
+import { CreationToolbar } from "./edit/CreationToolbar";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -34,7 +36,7 @@ export interface CanvasPaneProps {
 	/** 'view' = read-only (no drag, no info icon). 'edit' = interactive. */
 	mode: "view" | "edit";
 	// Edit-mode only:
-	pendingChanges?: StepPendingChange[];
+	pendingChanges?: PendingChangeItem[];
 	highlightedStepId?: string | null;
 	onBlockMove?: (stepId: string, newGridX: number, newGridY: number) => void;
 	onInfoFieldChange?: (
@@ -46,6 +48,10 @@ export interface CanvasPaneProps {
 	onEdit?: () => void;
 	onClone?: () => void;
 	isEditMode?: boolean;
+	// Creation toolbar callbacks (edit mode only — all three must be provided):
+	onAddBlock?: () => void;
+	onAddConnection?: () => void;
+	onAddTransition?: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -78,6 +84,9 @@ export function CanvasPane({
 	onEdit,
 	onClone,
 	isEditMode,
+	onAddBlock,
+	onAddConnection,
+	onAddTransition,
 }: CanvasPaneProps) {
 	const [view, setView] = useState<ViewState>({ zoom: 1.0, panX: 0, panY: 0 });
 	const [showLegend, setShowLegend] = useState(false);
@@ -97,8 +106,10 @@ export function CanvasPane({
 	// ── Fit to screen ─────────────────────────────────────────
 
 	const handleFitToScreen = useCallback(() => {
+		// Use the display workflow (includes new-step drafts) for correct sizing
+		const displayWorkflow = computeDisplayWorkflow(workflow, pendingChanges);
 		const { width: cw, height: ch } = computeCanvasSize(
-			workflow.steps,
+			displayWorkflow.steps,
 			pendingChanges,
 		);
 		if (!containerRef.current || cw === 0 || ch === 0) {
@@ -264,6 +275,15 @@ export function CanvasPane({
 				isEditMode={isEditMode}
 			/>
 
+			{/* Creation toolbar — shown in edit mode when all three callbacks provided */}
+			{onAddBlock && onAddConnection && onAddTransition && (
+				<CreationToolbar
+					onAddBlock={onAddBlock}
+					onAddConnection={onAddConnection}
+					onAddTransition={onAddTransition}
+				/>
+			)}
+
 			{/* Legend overlay — absolutely positioned below toolbar */}
 			{showLegend && <WorkflowLegend onClose={() => setShowLegend(false)} />}
 
@@ -310,7 +330,7 @@ export function CanvasPane({
 					}}
 				>
 					<EditableWorkflowCanvas
-						workflow={workflow}
+						workflow={computeDisplayWorkflow(workflow, pendingChanges)}
 						pendingChanges={pendingChanges}
 						readOnly={mode === "view"}
 						highlightedStepId={highlightedStepId}
