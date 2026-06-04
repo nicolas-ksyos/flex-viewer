@@ -110,7 +110,10 @@ export function AddConnectionModal({
 	// Reset to-step selection when from-step changes (but not on initial mount)
 	const isFirstRender = useState(true);
 	useEffect(() => {
-		if (isFirstRender[0]) { isFirstRender[1](false); return; }
+		if (isFirstRender[0]) {
+			isFirstRender[1](false);
+			return;
+		}
 		setToStepIds([]);
 	}, [fromStepId]); // eslint-disable-line react-hooks/exhaustive-deps
 
