@@ -58,6 +58,8 @@ export interface CanvasPaneProps {
 	onAddTransition?: () => void;
 	/** Called when user creates a connection from the settings popover */
 	onAddConnectionDraft?: (draft: Omit<NewConnectionDraft, "kind">) => void;
+	/** Called when user creates a disable transition (from context menu edit) */
+	onAddTransitionDraft?: (draft: Omit<import("../../shared/types").NewTransitionDraft, "kind">) => void;
 	/** Block parameter schemas fetched from the server (for typed param editing) */
 	blockParameterSchemas?: BlockParameterSchemas;
 	/** Called when parameters are changed via the typed editor in the popover */
@@ -109,6 +111,7 @@ export function CanvasPane({
 	onAddConnection,
 	onAddTransition,
 	onAddConnectionDraft,
+	onAddTransitionDraft,
 	blockParameterSchemas,
 	onParametersChange,
 	onDeleteBlock,
@@ -378,6 +381,9 @@ export function CanvasPane({
 						onInfoFieldChange={mode === "edit" ? onInfoFieldChange : undefined}
 						onAddConnectionDraft={
 							mode === "edit" ? onAddConnectionDraft : undefined
+						}
+						onAddTransitionDraft={
+							mode === "edit" ? onAddTransitionDraft : undefined
 						}
 						blockParameterSchemas={blockParameterSchemas}
 						allActivities={workflow.activities as ParsedWorkflowActivity[]}

@@ -111,8 +111,35 @@
   },
   "performActivity": {
     "blockName": "performActivity",
-    "fields": [],
-    "hasEditor": false
+    "fields": [
+      {
+        "key": "draftProcessTaskType",
+        "type": "enum",
+        "enumValues": [],
+        "required": false
+      },
+      {
+        "key": "isRedirectToSamlTask",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "recipientActivityIds",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "runOnRegisterGroupSessionAttendance",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "updatePreferenceList",
+        "type": "unknown",
+        "required": false
+      }
+    ],
+    "hasEditor": true
   },
   "sendEmailToRequester": {
     "blockName": "sendEmailToRequester",
@@ -237,7 +264,963 @@
   },
   "waitForAll": {
     "blockName": "waitForAll",
-    "fields": [],
-    "hasEditor": false
+    "fields": [
+      {
+        "key": "waitForServiceWorkflowStepIds",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "activateCaroQuestionnaireOrBodyWeightMeasurement": {
+    "blockName": "activateCaroQuestionnaireOrBodyWeightMeasurement",
+    "fields": [
+      {
+        "key": "type",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "assignToActivityPerformer": {
+    "blockName": "assignToActivityPerformer",
+    "fields": [
+      {
+        "key": "activityIdWithRecipient",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "assignWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "assignToEmergencyScheduleGrader": {
+    "blockName": "assignToEmergencyScheduleGrader",
+    "fields": [
+      {
+        "key": "assignWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "gradingServiceActivityId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "serviceActivityWithUrgency",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "assignToGraderPoolProvider": {
+    "blockName": "assignToGraderPoolProvider",
+    "fields": [
+      {
+        "key": "assignWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "examinationServiceActivityIds",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "gradingServiceActivityId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "holterAssignToHomeHolterOrganization": {
+    "blockName": "holterAssignToHomeHolterOrganization",
+    "fields": [
+      {
+        "key": "assignWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "assignToPreviousActiveActivityPerformer": {
+    "blockName": "assignToPreviousActiveActivityPerformer",
+    "fields": [
+      {
+        "key": "activityIdWithPerformer",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "assignWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "assignToPreviousActivityPerformerOrganization": {
+    "blockName": "assignToPreviousActivityPerformerOrganization",
+    "fields": [
+      {
+        "key": "activityIdWithPerformer",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "assignWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "assignToProcessActorOrganization": {
+    "blockName": "assignToProcessActorOrganization",
+    "fields": [
+      {
+        "key": "assignWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "profession",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "bariatricsNotifyProcessActor": {
+    "blockName": "bariatricsNotifyProcessActor",
+    "fields": [
+      {
+        "key": "activityId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "assignWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "processTaskType",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      },
+      {
+        "key": "profession",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "canPerformActivity": {
+    "blockName": "canPerformActivity",
+    "fields": [
+      {
+        "key": "serviceActivityIds",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "cancelProcessWorkflowSteps": {
+    "blockName": "cancelProcessWorkflowSteps",
+    "fields": [
+      {
+        "key": "serviceWorkflowStepIds",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkBooleanInActivity": {
+    "blockName": "checkBooleanInActivity",
+    "fields": [
+      {
+        "key": "activityIdWithValue",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "valueKeyPath",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkCaroInactivityNextStep": {
+    "blockName": "checkCaroInactivityNextStep",
+    "fields": [
+      {
+        "key": "activityId",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkConditions": {
+    "blockName": "checkConditions",
+    "fields": [
+      {
+        "key": "conditions",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkConditionsWithServiceContext": {
+    "blockName": "checkConditionsWithServiceContext",
+    "fields": [
+      {
+        "key": "conditions",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkEveryStepHasStatus": {
+    "blockName": "checkEveryStepHasStatus",
+    "fields": [
+      {
+        "key": "serviceWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "status",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkForTruthy": {
+    "blockName": "checkForTruthy",
+    "fields": [
+      {
+        "key": "activityId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "customControlDataNestedFieldkeys",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkNotEmpty": {
+    "blockName": "checkNotEmpty",
+    "fields": [
+      {
+        "key": "activityId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "customControlDataFieldkey",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkSomeConditions": {
+    "blockName": "checkSomeConditions",
+    "fields": [
+      {
+        "key": "conditions",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkSomeStepsHaveStatus": {
+    "blockName": "checkSomeStepsHaveStatus",
+    "fields": [
+      {
+        "key": "steps",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "checkStringValueInActivity": {
+    "blockName": "checkStringValueInActivity",
+    "fields": [
+      {
+        "key": "activityIdWithValue",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "valueKeyPath",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "completeTask": {
+    "blockName": "completeTask",
+    "fields": [
+      {
+        "key": "taskType",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "createCompletedResendQuestionnaires": {
+    "blockName": "createCompletedResendQuestionnaires",
+    "fields": [
+      {
+        "key": "customControlCode",
+        "type": "enum",
+        "enumValues": [
+          "OSASConsult",
+          "OSASTreatmentChoice"
+        ],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "createHomeHolterReminderPatientTask": {
+    "blockName": "createHomeHolterReminderPatientTask",
+    "fields": [
+      {
+        "key": "customControlData",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "intervalNumber",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "intervalType",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "performerPractitionerProfession",
+        "type": "enum",
+        "enumValues": [],
+        "required": false
+      },
+      {
+        "key": "taskType",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "createMraReferralLetter": {
+    "blockName": "createMraReferralLetter",
+    "fields": [
+      {
+        "key": "customControlCodeOfConsult",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "createOsasTaskForChosenTreatment": {
+    "blockName": "createOsasTaskForChosenTreatment",
+    "fields": [
+      {
+        "key": "customControlCode",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "createPatientTask": {
+    "blockName": "createPatientTask",
+    "fields": [
+      {
+        "key": "customControlData",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "description",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "intervalNumber",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "intervalType",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "performerPractitionerProfession",
+        "type": "enum",
+        "enumValues": [],
+        "required": false
+      },
+      {
+        "key": "taskType",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "createReferralLetter": {
+    "blockName": "createReferralLetter",
+    "fields": [
+      {
+        "key": "customControlCode",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "createTaskForAdminStatus": {
+    "blockName": "createTaskForAdminStatus",
+    "fields": [
+      {
+        "key": "assignWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "createTherapielandRequest": {
+    "blockName": "createTherapielandRequest",
+    "fields": [
+      {
+        "key": "field",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "serviceActivityId",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "insertInGroupMeetingPatientsTable": {
+    "blockName": "insertInGroupMeetingPatientsTable",
+    "fields": [
+      {
+        "key": "subtype",
+        "type": "enum",
+        "enumValues": [],
+        "required": false
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "insertInPatientConsentsTable": {
+    "blockName": "insertInPatientConsentsTable",
+    "fields": [
+      {
+        "key": "activityIdWithPerformer",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "insertInProcessActorsTable": {
+    "blockName": "insertInProcessActorsTable",
+    "fields": [
+      {
+        "key": "professions",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "serviceIdToCopyFrom",
+        "type": "unknown",
+        "required": false
+      }
+    ],
+    "hasEditor": true
+  },
+  "insertPoliclinicOrganizationInProcessActorsTable": {
+    "blockName": "insertPoliclinicOrganizationInProcessActorsTable",
+    "fields": [
+      {
+        "key": "professions",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "intervalWeeksBasedOnServiceActivityScheduler": {
+    "blockName": "intervalWeeksBasedOnServiceActivityScheduler",
+    "fields": [
+      {
+        "key": "customControlCode",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      },
+      {
+        "key": "customControlPoperty",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "invitePatientToBrightPlan": {
+    "blockName": "invitePatientToBrightPlan",
+    "fields": [
+      {
+        "key": "activityPerformedByProfessional",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "description",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "intervalNumber",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "intervalType",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "location",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "operationType",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "poliFollowUpDays",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "title",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "osasCreateExternalReferralLetter": {
+    "blockName": "osasCreateExternalReferralLetter",
+    "fields": [
+      {
+        "key": "customControlCodeOfConsult",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "percentageYesOrNo": {
+    "blockName": "percentageYesOrNo",
+    "fields": [
+      {
+        "key": "percentageYes",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "saveProcessQuestionnaireResponse": {
+    "blockName": "saveProcessQuestionnaireResponse",
+    "fields": [
+      {
+        "key": "questionnaireName",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendEmailToGeneralPractitioner": {
+    "blockName": "sendEmailToGeneralPractitioner",
+    "fields": [
+      {
+        "key": "episodeCategory",
+        "type": "enum",
+        "enumValues": [
+          "somnology"
+        ],
+        "required": true
+      },
+      {
+        "key": "template",
+        "type": "enum",
+        "enumValues": [
+          "osasAbortedProcesses120days"
+        ],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendEmailToPatient": {
+    "blockName": "sendEmailToPatient",
+    "fields": [
+      {
+        "key": "customControlCodes",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "template",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      },
+      {
+        "key": "templateParameters",
+        "type": "unknown",
+        "required": false
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendEmailToPatientTaskPerformer": {
+    "blockName": "sendEmailToPatientTaskPerformer",
+    "fields": [
+      {
+        "key": "emailType",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      },
+      {
+        "key": "patientTaskType",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendEmailToRequesterBasedOnNotificationSettings": {
+    "blockName": "sendEmailToRequesterBasedOnNotificationSettings",
+    "fields": [
+      {
+        "key": "emailLabel",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "emailType",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      },
+      {
+        "key": "resultIsDeviantCustomControlCode",
+        "type": "enum",
+        "enumValues": [],
+        "required": false
+      },
+      {
+        "key": "resultIsDeviantProperty",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "resultIsDeviantValues",
+        "type": "unknown",
+        "required": false
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendEmailToStepPerformer": {
+    "blockName": "sendEmailToStepPerformer",
+    "fields": [
+      {
+        "key": "emailType",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      },
+      {
+        "key": "recipientWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendEmailToTaskPerformerBasedOnNotificationSettings": {
+    "blockName": "sendEmailToTaskPerformerBasedOnNotificationSettings",
+    "fields": [
+      {
+        "key": "emailTemplateParameters",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "emailType",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      },
+      {
+        "key": "recipientTaskWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "serviceType",
+        "type": "enum",
+        "enumValues": [],
+        "required": false
+      },
+      {
+        "key": "taskStatuses",
+        "type": "unknown",
+        "required": false
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendUrgentHolterGradingNotificationToSupport": {
+    "blockName": "sendUrgentHolterGradingNotificationToSupport",
+    "fields": [
+      {
+        "key": "serviceActivityWithUrgency",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendZorgmailToGeneralPractitioner": {
+    "blockName": "sendZorgmailToGeneralPractitioner",
+    "fields": [
+      {
+        "key": "messageTextGeneratorName",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "messageType",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "senderIsPerformerOfActivity",
+        "type": "enum",
+        "enumValues": [],
+        "required": false
+      }
+    ],
+    "hasEditor": true
+  },
+  "setProcessStatusFlags": {
+    "blockName": "setProcessStatusFlags",
+    "fields": [
+      {
+        "key": "removeFlags",
+        "type": "unknown",
+        "required": false
+      },
+      {
+        "key": "setFlags",
+        "type": "unknown",
+        "required": false
+      }
+    ],
+    "hasEditor": true
+  },
+  "setRequesterFromActivityData": {
+    "blockName": "setRequesterFromActivityData",
+    "fields": [
+      {
+        "key": "serviceActivityId",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "startProcessFromExistingProcess": {
+    "blockName": "startProcessFromExistingProcess",
+    "fields": [
+      {
+        "key": "serviceCode",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "updateCaroPatientFromStep": {
+    "blockName": "updateCaroPatientFromStep",
+    "fields": [
+      {
+        "key": "serviceWorkflowStepId",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "updateDeviceFirmwareVersion": {
+    "blockName": "updateDeviceFirmwareVersion",
+    "fields": [
+      {
+        "key": "customControlCode",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      },
+      {
+        "key": "deviceFirmwareVersionKey",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "deviceIdKey",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "updateGroupMeetingPatient": {
+    "blockName": "updateGroupMeetingPatient",
+    "fields": [
+      {
+        "key": "customControlCodes",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "uploadRecordingToAnalysisParty": {
+    "blockName": "uploadRecordingToAnalysisParty",
+    "fields": [
+      {
+        "key": "analysisParty",
+        "type": "unknown",
+        "required": true
+      },
+      {
+        "key": "messageType",
+        "type": "unknown",
+        "required": true
+      }
+    ],
+    "hasEditor": true
   }
 }

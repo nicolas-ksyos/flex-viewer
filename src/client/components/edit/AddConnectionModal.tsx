@@ -14,6 +14,10 @@ interface AddConnectionModalProps {
 	existingTransitions: ParsedWorkflowTransition[];
 	/** New step drafts that are also selectable as from/to targets */
 	newStepDrafts?: Array<{ tempId: string; name: string }>;
+	/** Pre-fill the from-step picker */
+	initialFromStepId?: string;
+	/** Pre-fill the to-step checkboxes */
+	initialToStepIds?: string[];
 	onAdd: (draft: Omit<NewConnectionDraft, "kind">) => void;
 	onCancel: () => void;
 }
@@ -85,11 +89,13 @@ export function AddConnectionModal({
 	existingSteps,
 	existingTransitions,
 	newStepDrafts,
+	initialFromStepId,
+	initialToStepIds,
 	onAdd,
 	onCancel,
 }: AddConnectionModalProps) {
-	const [fromStepId, setFromStepId] = useState("");
-	const [toStepIds, setToStepIds] = useState<string[]>([]);
+	const [fromStepId, setFromStepId] = useState(initialFromStepId ?? "");
+	const [toStepIds, setToStepIds] = useState<string[]>(initialToStepIds ?? []);
 	const [synchronous, setSynchronous] = useState(false);
 
 	// Close on Escape
@@ -101,10 +107,12 @@ export function AddConnectionModal({
 		return () => window.removeEventListener("keydown", handler);
 	}, [onCancel]);
 
-	// Reset to-step selection when from-step changes
+	// Reset to-step selection when from-step changes (but not on initial mount)
+	const isFirstRender = useState(true);
 	useEffect(() => {
+		if (isFirstRender[0]) { isFirstRender[1](false); return; }
 		setToStepIds([]);
-	}, [fromStepId]);
+	}, [fromStepId]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const allStepOptions = buildStepOptions(existingSteps, newStepDrafts);
 

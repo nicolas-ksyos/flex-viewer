@@ -1,5 +1,6 @@
 import type React from "react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import "./EditableWorkflowCanvas.css";
 import type {
 	ParsedWorkflowDefinition,
@@ -15,6 +16,11 @@ import type {
 	RemovedConnectionDraft,
 } from "../../../shared/types";
 import { BlockSettingsPopover } from "./BlockSettingsPopover";
+import { ConnectionContextMenu } from "./ConnectionContextMenu";
+import { ConnectionEditModal } from "./ConnectionEditModal";
+import type { ConnectionEditResult } from "./ConnectionEditModal";
+import { AddConnectionModal } from "./AddConnectionModal";
+
 
 // ─────────────────────────────────────────────────────────────
 // Grid / block sizing constants
@@ -61,14 +67,14 @@ const BLOCK_TYPE_STYLES: Record<string, BlockStyle> = {
 		border: "#3C3CFF",
 		text: "#322A24",
 		shape: "rect",
-		borderWidth: 8,
+		borderWidth: 4,
 	},
 	action: {
 		bg: "#E0E8FF",
 		border: "#3C3CFF",
 		text: "#322A24",
 		shape: "rect",
-		borderWidth: 8,
+		borderWidth: 4,
 	},
 	choice: {
 		bg: "#FAFAFA",
@@ -109,7 +115,20 @@ const DEFAULT_STYLE: BlockStyle = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Drag state
+// Connection-drag state (drag from block border to create a link)
+// ─────────────────────────────────────────────────────────────
+
+interface ConnectionDragState {
+	fromStepId: string;
+	fromPixelX: number; // start point on source block edge
+	fromPixelY: number;
+	currentX: number;   // cursor position in canvas-local px
+	currentY: number;
+	hoverTargetId: string | null; // step under cursor (if any)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Block-drag state
 // ─────────────────────────────────────────────────────────────
 
 interface DragState {
@@ -137,8 +156,12 @@ export interface EditableWorkflowCanvasProps {
 		field: keyof EditableStepFields,
 		value: string | number | boolean | null,
 	) => void;
-	/** Called when a new connection is created from the settings popover */
+	/** Called when a new connection is created (from the popover or drag) */
 	onAddConnectionDraft?: (draft: Omit<NewConnectionDraft, "kind">) => void;
+	/** Called when a disable-transition is added (from context menu edit) */
+	onAddTransitionDraft?: (draft: Omit<import("../../../shared/types").NewTransitionDraft, "kind">) => void;
+	/** Called when user clicks a transition line in edit mode */
+	onTransitionClick?: (transition: ParsedWorkflowTransition, pos: { x: number; y: number }) => void;
 	/** Called when the trash icon is clicked to mark a block for deletion */
 	onDeleteBlock?: (step: ParsedWorkflowStep) => void;
 	/** Called when the undo icon is clicked to cancel a pending deletion */
@@ -275,6 +298,11 @@ interface WorkflowBlockProps {
 	onDeleteClick?: () => void;
 	/** Called when undo icon is clicked (cancel pending deletion) */
 	onUndoClick?: () => void;
+	/** Called when a connection handle (edge circle) is mousedown'd */
+	onConnectionHandleMouseDown?: (
+		e: React.MouseEvent,
+		side: "top" | "bottom" | "left" | "right",
+	) => void;
 }
 
 function WorkflowBlock({
@@ -293,6 +321,7 @@ function WorkflowBlock({
 	onInfoIconClick,
 	onDeleteClick,
 	onUndoClick,
+	onConnectionHandleMouseDown,
 }: WorkflowBlockProps) {
 	const styles =
 		BLOCK_TYPE_STYLES[step.serviceWorkflowBlock.type] ?? DEFAULT_STYLE;
@@ -610,6 +639,84 @@ function WorkflowBlock({
 		onMouseLeave,
 	};
 
+	// Connection handles — shown on hover for interactive (non-read-only, non-deleted) blocks.
+	// Four small blue circles at the midpoint of each edge.
+	const showHandles =
+		!readOnly && !isDeleted && !step.isNew && isHovered && !isDragging;
+
+	const handleBaseStyle: React.CSSProperties = {
+		position: "absolute",
+		width: 12,
+		height: 12,
+		borderRadius: "50%",
+		background: "#3b82f6",
+		border: "2px solid white",
+		cursor: "crosshair",
+		zIndex: 6,
+		boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+	};
+
+	const connectionHandles = showHandles ? (
+		<>
+			{/* Top */}
+			<div
+				onMouseDown={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					onConnectionHandleMouseDown?.(e, "top");
+				}}
+				style={{
+					...handleBaseStyle,
+					top: -6,
+					left: "50%",
+					transform: "translateX(-50%)",
+				}}
+			/>
+			{/* Bottom */}
+			<div
+				onMouseDown={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					onConnectionHandleMouseDown?.(e, "bottom");
+				}}
+				style={{
+					...handleBaseStyle,
+					bottom: -6,
+					left: "50%",
+					transform: "translateX(-50%)",
+				}}
+			/>
+			{/* Left */}
+			<div
+				onMouseDown={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					onConnectionHandleMouseDown?.(e, "left");
+				}}
+				style={{
+					...handleBaseStyle,
+					left: -6,
+					top: "50%",
+					transform: "translateY(-50%)",
+				}}
+			/>
+			{/* Right */}
+			<div
+				onMouseDown={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					onConnectionHandleMouseDown?.(e, "right");
+				}}
+				style={{
+					...handleBaseStyle,
+					right: -6,
+					top: "50%",
+					transform: "translateY(-50%)",
+				}}
+			/>
+		</>
+	) : null;
+
 	// ── Ellipse (start) ──────────────────────────────────────
 	// The boxShadow is on the inner circle div (which has borderRadius:50%) so
 	// the shadow and highlight ring are circular, not rectangular.
@@ -643,6 +750,7 @@ function WorkflowBlock({
 				{infoIcon}
 				{trashIcon}
 				{undoIcon}
+				{connectionHandles}
 			</div>
 		);
 	}
@@ -691,6 +799,7 @@ function WorkflowBlock({
 				{infoIcon}
 				{trashIcon}
 				{undoIcon}
+				{connectionHandles}
 			</div>
 		);
 	}
@@ -720,6 +829,7 @@ function WorkflowBlock({
 			{infoIcon}
 			{trashIcon}
 			{undoIcon}
+			{connectionHandles}
 		</div>
 	);
 }
@@ -737,6 +847,8 @@ interface TransitionLinesProps {
 	deletedStepIds: Set<string>;
 	/** "fromId-toId" keys for connections pending removal */
 	removedConnectionKeys: Set<string>;
+	/** Called when the user clicks a transition line */
+	onTransitionClick?: (t: ParsedWorkflowTransition, pos: { x: number; y: number }) => void;
 }
 
 function TransitionLines({
@@ -746,13 +858,16 @@ function TransitionLines({
 	canvasHeight,
 	deletedStepIds,
 	removedConnectionKeys,
+	onTransitionClick,
 }: TransitionLinesProps) {
 	return (
 		<svg
 			style={{
 				position: "absolute",
 				inset: 0,
-				pointerEvents: "none",
+				// pointerEvents "all" so hit-area lines receive click events.
+				// Individual non-interactive elements still use pointerEvents "none".
+				pointerEvents: onTransitionClick ? "all" : "none",
 				overflow: "visible",
 			}}
 			width={canvasWidth}
@@ -905,9 +1020,40 @@ function TransitionLines({
 				const midX = (x1 + x2) / 2;
 				const midY = (y1 + y2) / 2;
 
+				// Click handler — captures viewport coords, converts to canvas-local
+				const handleLineClick = onTransitionClick
+					? (e: React.MouseEvent<SVGElement>) => {
+							e.stopPropagation();
+							const svgRect = (e.target as SVGElement)
+								.closest("svg")
+								?.getBoundingClientRect();
+							if (svgRect) {
+								onTransitionClick(t, {
+									x: e.clientX - svgRect.left,
+									y: e.clientY - svgRect.top,
+								});
+							}
+					  }
+					: undefined;
+
 				return (
 					<g key={t.id}>
-						<line x1={x1} y1={y1} x2={x2} y2={y2} {...lineAttrs} />
+						{/* Visible line */}
+						<line
+							x1={x1} y1={y1} x2={x2} y2={y2}
+							{...lineAttrs}
+							style={{ pointerEvents: "none" }}
+						/>
+						{/* Wide invisible hit-area for easier clicking */}
+						{handleLineClick && (
+							<line
+								x1={x1} y1={y1} x2={x2} y2={y2}
+								stroke="transparent"
+								strokeWidth={14}
+								style={{ pointerEvents: "stroke", cursor: "pointer" }}
+								onClick={handleLineClick}
+							/>
+						)}
 						{t.onlyIfOutputEquals && (
 							<text
 								x={midX}
@@ -938,6 +1084,8 @@ export function EditableWorkflowCanvas({
 	onInfoIconClick,
 	onInfoFieldChange,
 	onAddConnectionDraft,
+	onAddTransitionDraft,
+	onTransitionClick: onTransitionClickProp,
 	zoomLevel,
 	highlightedStepId,
 	readOnly = false,
@@ -950,6 +1098,24 @@ export function EditableWorkflowCanvas({
 	onUndoRemoveConnection,
 }: EditableWorkflowCanvasProps) {
 	const zoom = zoomLevel ?? 1;
+
+	// ── Context menu state (click on transition line) ─────
+	const [contextMenu, setContextMenu] = useState<{
+		transition: ParsedWorkflowTransition;
+		pos: { x: number; y: number };
+	} | null>(null);
+	const [editingTransition, setEditingTransition] =
+		useState<ParsedWorkflowTransition | null>(null);
+
+	// Internal handler: closes popover + opens context menu
+	const handleTransitionClick = (
+		t: ParsedWorkflowTransition,
+		pos: { x: number; y: number },
+	) => {
+		setOpenPopoverStepId(null);
+		setContextMenu({ transition: t, pos });
+		onTransitionClickProp?.(t, pos);
+	};
 
 	// ── Deleted / impacted / removed-connection Sets ─────────
 	// Derived from pendingChanges; used by WorkflowBlock and TransitionLines
@@ -991,6 +1157,17 @@ export function EditableWorkflowCanvas({
 	const [dragPixel, setDragPixel] = useState<{ x: number; y: number } | null>(
 		null,
 	);
+
+	// ── Connection-drag state ─────────────────────────────
+	const [connectionDrag, setConnectionDrag] =
+		useState<ConnectionDragState | null>(null);
+	const [pendingConnectionDraft, setPendingConnectionDraft] = useState<{
+		fromStepId: string;
+		toStepId: string;
+	} | null>(null);
+
+	// Ref on the canvas div for hit-test coordinate conversion
+	const canvasInnerRef = useRef<HTMLDivElement>(null);
 
 	// ── Hover / popover state (T7) ────────────────────────────
 	const [hoveredStepId, setHoveredStepId] = useState<string | null>(null);
@@ -1066,6 +1243,90 @@ export function EditableWorkflowCanvas({
 		};
 	}, [dragState, onBlockMove, zoom]);
 
+	// ── Connection-drag mouse handlers ─────────────────────────
+
+	const handleConnectionHandleMouseDown = (
+		e: React.MouseEvent,
+		step: ParsedWorkflowStep,
+		side: "top" | "bottom" | "left" | "right",
+	) => {
+		if (readOnly) return;
+		e.stopPropagation();
+		e.preventDefault();
+		const { pixelX, pixelY } = effectivePosition(
+			step,
+			pendingChanges,
+			null,
+			null,
+		);
+		const cx = pixelX + BLOCK_WIDTH / 2;
+		const cy = pixelY + BLOCK_HEIGHT / 2;
+		let startX = cx;
+		let startY = cy;
+		if (side === "right") { startX = pixelX + BLOCK_WIDTH; startY = cy; }
+		if (side === "left") { startX = pixelX; startY = cy; }
+		if (side === "top") { startX = cx; startY = pixelY; }
+		if (side === "bottom") { startX = cx; startY = pixelY + BLOCK_HEIGHT; }
+		setConnectionDrag({
+			fromStepId: step.id,
+			fromPixelX: startX,
+			fromPixelY: startY,
+			currentX: startX,
+			currentY: startY,
+			hoverTargetId: null,
+		});
+	};
+
+	useEffect(() => {
+		if (!connectionDrag) return;
+		const el = canvasInnerRef.current;
+
+		const handleMouseMove = (e: MouseEvent) => {
+			const rect = el?.getBoundingClientRect();
+			if (!rect) return;
+			const canvasX = (e.clientX - rect.left) / zoom;
+			const canvasY = (e.clientY - rect.top) / zoom;
+			const targetStep = workflow.steps.find((s) => {
+				const { pixelX, pixelY } = effectivePosition(
+					s,
+					pendingChanges,
+					null,
+					null,
+				);
+				return (
+					canvasX >= pixelX &&
+					canvasX <= pixelX + BLOCK_WIDTH &&
+					canvasY >= pixelY &&
+					canvasY <= pixelY + BLOCK_HEIGHT &&
+					s.id !== connectionDrag.fromStepId
+				);
+			});
+			setConnectionDrag((prev) =>
+				prev
+					? { ...prev, currentX: canvasX, currentY: canvasY, hoverTargetId: targetStep?.id ?? null }
+					: null,
+			);
+		};
+
+		const handleMouseUp = () => {
+			if (connectionDrag.hoverTargetId) {
+				setPendingConnectionDraft({
+					fromStepId: connectionDrag.fromStepId,
+					toStepId: connectionDrag.hoverTargetId,
+				});
+			}
+			setConnectionDrag(null);
+		};
+
+		window.addEventListener("mousemove", handleMouseMove);
+		window.addEventListener("mouseup", handleMouseUp);
+		return () => {
+			window.removeEventListener("mousemove", handleMouseMove);
+			window.removeEventListener("mouseup", handleMouseUp);
+		};
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [connectionDrag?.fromStepId, zoom]);
+
 	if (workflow.steps.length === 0) {
 		return (
 			<div style={{ padding: 24, textAlign: "center", color: "#666" }}>
@@ -1127,7 +1388,9 @@ export function EditableWorkflowCanvas({
 	// Canvas renders at its natural pixel size; zoom is applied by the
 	// App-level wrapper (spacer + CSS scale) so scrollbars are always correct.
 	return (
+		<>
 		<div
+			ref={canvasInnerRef}
 			className={`editable-canvas${isDraggingAny ? " canvas--dragging" : ""}`}
 			style={{ position: "relative", width: canvasWidth, height: canvasHeight }}
 		>
@@ -1139,6 +1402,7 @@ export function EditableWorkflowCanvas({
 				canvasHeight={canvasHeight}
 				deletedStepIds={deletedStepIds}
 				removedConnectionKeys={removedConnectionKeys}
+				onTransitionClick={!readOnly ? handleTransitionClick : undefined}
 			/>
 
 			{/* Block layer */}
@@ -1164,6 +1428,11 @@ export function EditableWorkflowCanvas({
 					onDeleteClick={onDeleteBlock ? () => onDeleteBlock(step) : undefined}
 					onUndoClick={
 						onUndoDeleteBlock ? () => onUndoDeleteBlock(step.id) : undefined
+					}
+					onConnectionHandleMouseDown={
+						!readOnly && !deletedStepIds.has(step.id)
+							? (e, side) => handleConnectionHandleMouseDown(e, step, side)
+							: undefined
 					}
 				/>
 			))}
@@ -1205,16 +1474,128 @@ export function EditableWorkflowCanvas({
 							pendingRemovedConnectionKeys={removedConnectionKeys}
 							blockParameterSchema={
 								blockParameterSchemas?.[popStep.serviceWorkflowBlock.name]
-							}
-							allActivities={allActivities ?? []}
-							onParametersChange={
-								onParametersChange
-									? (params) => onParametersChange(popStep, params)
-									: undefined
-							}
-						/>
-					);
+						}
+						allActivities={allActivities ?? []}
+						onParametersChange={
+							onParametersChange
+								? (params) => onParametersChange(popStep, params)
+								: undefined
+						}
+					/>
+				);
 				})()}
+
+			{/* Connection context menu — opened when user clicks a line */}
+			{contextMenu && (
+				<ConnectionContextMenu
+					transition={contextMenu.transition}
+					position={contextMenu.pos}
+					allSteps={workflow.steps}
+					onEdit={() => {
+						setEditingTransition(contextMenu.transition);
+						setContextMenu(null);
+					}}
+					onDelete={() => {
+						const t = contextMenu.transition;
+						const fromStep = workflow.steps.find((s) => s.id === t.fromStepId);
+						const toStep = workflow.steps.find((s) => s.id === t.toStepId);
+						onRemoveConnection?.({
+							tempId: `rm-click-${t.id}`,
+							fromStepId: t.fromStepId,
+							fromStepName: fromStep?.name ?? t.fromStepId,
+							fromVariableName: fromStep?.variableName ?? "",
+							toStepId: t.toStepId,
+							toStepName: toStep?.name ?? t.toStepId,
+							toVariableName: toStep?.variableName ?? "",
+							synchronous: t.synchronous,
+							isDisable: t.type === "disable",
+						});
+						setContextMenu(null);
+					}}
+					onClose={() => setContextMenu(null)}
+				/>
+			)}
+
+			{/* Connection edit modal — opened via context menu Edit action */}
+			{editingTransition && (
+				<ConnectionEditModal
+					transition={editingTransition}
+					allSteps={workflow.steps}
+					onSave={(result: ConnectionEditResult) => {
+						onRemoveConnection?.(result.removal);
+						if (result.newConnection) onAddConnectionDraft?.(result.newConnection);
+						if (result.newTransition) onAddTransitionDraft?.(result.newTransition);
+					}}
+					onCancel={() => setEditingTransition(null)}
+				/>
+			)}
+
+			{/* Connection-drag preview line */}
+			{connectionDrag && (
+				<svg
+					style={{
+						position: "absolute",
+						inset: 0,
+						pointerEvents: "none",
+						zIndex: 50,
+						overflow: "visible",
+					}}
+					width={canvasWidth}
+					height={canvasHeight}
+				>
+					<line
+						x1={connectionDrag.fromPixelX}
+						y1={connectionDrag.fromPixelY}
+						x2={connectionDrag.currentX}
+						y2={connectionDrag.currentY}
+						stroke={
+							connectionDrag.hoverTargetId ? "#3b82f6" : "#9ca3af"
+						}
+						strokeWidth={2}
+						strokeDasharray="8 4"
+					/>
+					{connectionDrag.hoverTargetId &&
+						(() => {
+							const tgt = workflow.steps.find(
+								(s) => s.id === connectionDrag.hoverTargetId,
+							);
+							if (!tgt) return null;
+							const { pixelX: tx, pixelY: ty } = effectivePosition(
+								tgt,
+								pendingChanges,
+								null,
+								null,
+							);
+							return (
+								<circle
+									cx={tx + BLOCK_WIDTH / 2}
+									cy={ty + BLOCK_HEIGHT / 2}
+									r={8}
+									fill="none"
+									stroke="#3b82f6"
+									strokeWidth={2}
+								/>
+							);
+						})()}
+				</svg>
+			)}
 		</div>
+
+		{/* AddConnectionModal via portal so position:fixed works outside
+		     the CSS transform applied by CanvasPane */}
+		{pendingConnectionDraft &&
+			createPortal(
+				<AddConnectionModal
+					existingSteps={workflow.steps}
+					existingTransitions={workflow.transitions}
+					onAdd={(draft) => {
+						onAddConnectionDraft?.(draft);
+						setPendingConnectionDraft(null);
+					}}
+					onCancel={() => setPendingConnectionDraft(null)}
+				/>,
+				document.body,
+			)}
+		</>
 	);
 }

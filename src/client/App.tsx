@@ -410,6 +410,7 @@ export function App() {
 									onAddConnection={() => setShowAddConnection(true)}
 									onAddTransition={() => setShowAddTransition(true)}
 									onAddConnectionDraft={(draft) => addNewConnection(draft)}
+									onAddTransitionDraft={(draft) => addNewTransition(draft)}
 									blockParameterSchemas={blockParameterSchemas}
 									onParametersChange={(step, params) => {
 										recordFieldChange(step, "parameters", params as any);
