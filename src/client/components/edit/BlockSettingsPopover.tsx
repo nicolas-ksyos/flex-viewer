@@ -675,6 +675,7 @@ export function BlockSettingsPopover({
 	return (
 		<div
 			ref={ref}
+			data-role="block-settings-popover"
 			style={{
 				position: "absolute",
 				top: position.top,

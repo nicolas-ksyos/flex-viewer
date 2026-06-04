@@ -189,7 +189,12 @@ export function CanvasPane({
 		const el = containerRef.current;
 		if (!el) return;
 
-		const handleWheel = (e: WheelEvent) => {
+			const handleWheel = (e: WheelEvent) => {
+			// If the wheel event originates inside the settings popover, let it
+			// scroll the popover content instead of zooming the canvas.
+			if ((e.target as Element | null)?.closest('[data-role="block-settings-popover"]')) {
+				return;
+			}
 			e.preventDefault();
 			const rect = el.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
