@@ -9,6 +9,8 @@ import type {
 	NewStepDraft,
 	NewConnectionDraft,
 	NewTransitionDraft,
+	DeletedBlockDraft,
+	RemovedConnectionDraft,
 } from "../../shared/types";
 import { BLOCK_TYPE_MAP } from "../../shared/blockTypes";
 
@@ -207,8 +209,22 @@ export interface UseEditModeReturn {
 	addNewConnection: (draft: Omit<NewConnectionDraft, "kind">) => void;
 	/** Add a new TransitionType.disable link. */
 	addNewTransition: (draft: Omit<NewTransitionDraft, "kind">) => void;
-	/** Remove a new-step / new-connection / new-transition draft by tempId. */
-	removeNewItem: (tempId: string) => void;
+	/** Remove a new-step / new-connection / new-transition draft by tempId,
+	 *  or a delete-step draft by stepId, or a remove-connection draft by tempId. */
+	removeNewItem: (idOrTempId: string) => void;
+	/** Mark an existing step as pending deletion. Computes impacted steps from the workflow. */
+	recordBlockDeletion: (
+		step: ParsedWorkflowStep,
+		workflow: ParsedWorkflowDefinition,
+	) => void;
+	/** Undo a pending block deletion. */
+	undoBlockDeletion: (stepId: string) => void;
+	/** Record a pending removal of an existing connection. */
+	recordConnectionRemoval: (
+		draft: Omit<RemovedConnectionDraft, "kind">,
+	) => void;
+	/** Undo a pending connection removal by its tempId. */
+	undoConnectionRemoval: (tempId: string) => void;
 	discardChanges: () => void;
 }
 
@@ -321,18 +337,90 @@ export function useEditMode(): UseEditModeReturn {
 	);
 
 	const removeNewItem = useCallback(
-		(tempId: string) =>
+		(idOrTempId: string) =>
 			setPendingChanges((prev) =>
 				prev.filter((c) => {
-					if (
-						c.kind === "new-step" ||
-						c.kind === "new-connection" ||
-						c.kind === "new-transition"
-					) {
-						return c.tempId !== tempId;
-					}
+					if (c.kind === "new-step") return c.tempId !== idOrTempId;
+					if (c.kind === "new-connection") return c.tempId !== idOrTempId;
+					if (c.kind === "new-transition") return c.tempId !== idOrTempId;
+					if (c.kind === "delete-step") return c.stepId !== idOrTempId;
+					if (c.kind === "remove-connection") return c.tempId !== idOrTempId;
 					return true;
 				}),
+			),
+		[],
+	);
+
+	/**
+	 * Mark an existing step as pending deletion.
+	 * Computes which steps will be impacted (those that reference this step
+	 * in their outgoing transitions).
+	 */
+	const recordBlockDeletion = useCallback(
+		(step: ParsedWorkflowStep, workflow: ParsedWorkflowDefinition) => {
+			// Find all steps that have a transition pointing TO the step being deleted
+			const incomingTransitions = workflow.transitions.filter(
+				(t) => t.toStepId === step.id,
+			);
+			const impactedSet = new Set(
+				incomingTransitions
+					.map((t) => t.fromStepId)
+					.filter((id) => id !== step.id),
+			);
+			const impactedSteps = workflow.steps.filter((s) => impactedSet.has(s.id));
+
+			const draft: DeletedBlockDraft = {
+				kind: "delete-step",
+				stepId: step.id,
+				stepName: step.name,
+				variableName: step.variableName ?? generateVariableName(step.name),
+				impactedStepIds: impactedSteps.map((s) => s.id),
+				impactedStepNames: impactedSteps.map((s) => s.name),
+			};
+
+			setPendingChanges((prev) => {
+				// Drop any existing edit-draft for this step — it's being deleted
+				const filtered = prev.filter(
+					(c) => !(c.kind === "edit" && c.stepId === step.id),
+				);
+				// Avoid duplicate delete drafts
+				if (
+					filtered.some((c) => c.kind === "delete-step" && c.stepId === step.id)
+				) {
+					return filtered;
+				}
+				return [...filtered, draft];
+			});
+		},
+		[],
+	);
+
+	const undoBlockDeletion = useCallback(
+		(stepId: string) =>
+			setPendingChanges((prev) =>
+				prev.filter((c) => !(c.kind === "delete-step" && c.stepId === stepId)),
+			),
+		[],
+	);
+
+	const recordConnectionRemoval = useCallback(
+		(draft: Omit<RemovedConnectionDraft, "kind">) =>
+			setPendingChanges((prev) => [
+				...prev,
+				{
+					kind: "remove-connection",
+					...draft,
+				} satisfies RemovedConnectionDraft,
+			]),
+		[],
+	);
+
+	const undoConnectionRemoval = useCallback(
+		(tempId: string) =>
+			setPendingChanges((prev) =>
+				prev.filter(
+					(c) => !(c.kind === "remove-connection" && c.tempId === tempId),
+				),
 			),
 		[],
 	);
@@ -351,6 +439,10 @@ export function useEditMode(): UseEditModeReturn {
 		addNewConnection,
 		addNewTransition,
 		removeNewItem,
+		recordBlockDeletion,
+		undoBlockDeletion,
+		recordConnectionRemoval,
+		undoConnectionRemoval,
 		discardChanges,
 	};
 }

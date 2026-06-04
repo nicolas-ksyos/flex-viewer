@@ -26,6 +26,8 @@ import type {
 	NewStepDraft,
 	NewConnectionDraft,
 	NewTransitionDraft,
+	DeletedBlockDraft,
+	RemovedConnectionDraft,
 } from "../shared/types.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -200,7 +202,7 @@ function findLastCreateStepEnd(source: string, filePath: string): number {
  */
 function generateStepCode(
 	draft: NewStepDraft,
-	stepVarNames: Map<string, string>,
+	_stepVarNames: Map<string, string>,
 ): string {
 	const f = draft.fields;
 	const I = "    "; // 4-space indent (function body level)
@@ -579,4 +581,355 @@ function formatParamValue(v: unknown, depth: number): string {
 		return formatParamObject(v as Record<string, unknown>, depth);
 	}
 	return JSON.stringify(v);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Public API — block deletion and connection removal
+// ─────────────────────────────────────────────────────────────
+
+type Replacement = { start: number; end: number; text: string };
+
+/**
+ * Deletes step declarations and removes all their references from the seed
+ * file.  Also removes specific connection entries.
+ *
+ * Operations are applied in a single pass (all replacements collected
+ * back-to-front, then applied) to avoid offset invalidation.
+ */
+export function deleteBlocksAndRemoveConnections(
+	filePath: string,
+	deletedSteps: DeletedBlockDraft[],
+	removedConnections: RemovedConnectionDraft[],
+): void {
+	if (deletedSteps.length === 0 && removedConnections.length === 0) return;
+
+	let source = fs.readFileSync(filePath, "utf-8");
+
+	// 1. Remove specific connection entries first (before step declarations
+	//    are deleted, so the file structure is still intact for lookups).
+	for (const removal of removedConnections) {
+		source = removeConnectionEntry(source, filePath, removal);
+	}
+
+	// 2. For each deleted step: remove its declaration, then scrub every
+	//    reference from other steps' nextSteps / synchronousNextSteps arrays
+	//    and from generateTransitions() calls.
+	for (const deleted of deletedSteps) {
+		source = deleteStepDeclaration(source, filePath, deleted.variableName);
+		source = removeVarFromAllNextSteps(source, filePath, deleted.variableName);
+	}
+
+	fs.writeFileSync(filePath, source, "utf-8");
+}
+
+// ─────────────────────────────────────────────────────────────
+// deleteStepDeclaration
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Removes the entire VariableStatement that declares `varName`.
+ * Includes leading whitespace/newlines (getFullStart → getEnd).
+ */
+function deleteStepDeclaration(
+	source: string,
+	filePath: string,
+	varName: string,
+): string {
+	const sf = ts.createSourceFile(
+		filePath,
+		source,
+		ts.ScriptTarget.ES2022,
+		true,
+	);
+
+	let stmtStart = -1;
+	let stmtEnd = -1;
+
+	function visit(node: ts.Node): void {
+		if (stmtStart >= 0) return;
+		// Look for: const varName = ...
+		if (ts.isVariableStatement(node)) {
+			for (const decl of node.declarationList.declarations) {
+				if (ts.isIdentifier(decl.name) && decl.name.text === varName) {
+					stmtStart = node.getFullStart();
+					stmtEnd = node.getEnd();
+					return;
+				}
+			}
+		}
+		ts.forEachChild(node, visit);
+	}
+
+	visit(sf);
+
+	if (stmtStart < 0) return source; // variable not found
+	return source.slice(0, stmtStart) + source.slice(stmtEnd);
+}
+
+// ─────────────────────────────────────────────────────────────
+// removeVarFromAllNextSteps
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Finds every `nextSteps`, `synchronousNextSteps` array literal in the file
+ * AND every `generateTransitions([...])` array and removes all elements that
+ * reference `varName` (either as a bare identifier or as the `step:` / `fromStep:` /
+ * `toStep:` property inside an object literal).
+ */
+function removeVarFromAllNextSteps(
+	source: string,
+	filePath: string,
+	varName: string,
+): string {
+	// Collect all replacements first, then apply back-to-front.
+	const replacements: Replacement[] = [];
+
+	const sf = ts.createSourceFile(
+		filePath,
+		source,
+		ts.ScriptTarget.ES2022,
+		true,
+	);
+
+	function matchesVar(expr: ts.Expression): boolean {
+		// Direct identifier
+		if (ts.isIdentifier(expr) && expr.text === varName) return true;
+		// await expr (e.g. await someStep) — unlikely in nextSteps but handle it
+		if (
+			ts.isAwaitExpression(expr) &&
+			ts.isIdentifier(expr.expression) &&
+			expr.expression.text === varName
+		)
+			return true;
+		return false;
+	}
+
+	/**
+	 * Returns true if the expression is an object literal whose `step`,
+	 * `fromStep`, or `toStep` property value equals varName.
+	 * e.g. { step: varName, type: TransitionType.disable }
+	 *      { fromStep: varName, toStep: ..., type: ... }
+	 */
+	function objectRefersToVar(expr: ts.Expression): boolean {
+		if (!ts.isObjectLiteralExpression(expr)) return false;
+		return expr.properties.some((p) => {
+			if (!ts.isPropertyAssignment(p) || !ts.isIdentifier(p.name)) return false;
+			const propName = p.name.text;
+			if (
+				propName !== "step" &&
+				propName !== "fromStep" &&
+				propName !== "toStep"
+			)
+				return false;
+			return matchesVar(p.initializer);
+		});
+	}
+
+	function collectFromArray(arr: ts.ArrayLiteralExpression): void {
+		const elems = arr.elements;
+		for (let i = 0; i < elems.length; i++) {
+			const el = elems[i];
+			if (!matchesVar(el) && !objectRefersToVar(el)) continue;
+
+			if (elems.length === 1) {
+				// Only element → remove content between '[' and ']'
+				replacements.push({
+					start: arr.getStart(sf) + 1,
+					end: arr.getEnd() - 1,
+					text: "",
+				});
+			} else if (i < elems.length - 1) {
+				// Not last → remove from this element's full start to next element's full start
+				replacements.push({
+					start: el.getFullStart(),
+					end: elems[i + 1].getFullStart(),
+					text: "",
+				});
+			} else {
+				// Last element → remove from prev element's end to this element's end
+				replacements.push({
+					start: elems[i - 1].getEnd(),
+					end: el.getEnd(),
+					text: "",
+				});
+			}
+		}
+	}
+
+	function visit(node: ts.Node): void {
+		// 1. Property assignments: nextSteps / synchronousNextSteps
+		if (
+			ts.isPropertyAssignment(node) &&
+			ts.isIdentifier(node.name) &&
+			(node.name.text === "nextSteps" ||
+				node.name.text === "synchronousNextSteps") &&
+			ts.isArrayLiteralExpression(node.initializer)
+		) {
+			collectFromArray(node.initializer);
+		}
+
+		// 2. generateTransitions([...]) call
+		if (
+			ts.isCallExpression(node) &&
+			ts.isPropertyAccessExpression(node.expression) &&
+			node.expression.name.text === "generateTransitions" &&
+			node.arguments.length > 0 &&
+			ts.isArrayLiteralExpression(node.arguments[0])
+		) {
+			collectFromArray(node.arguments[0] as ts.ArrayLiteralExpression);
+		}
+
+		ts.forEachChild(node, visit);
+	}
+
+	visit(sf);
+
+	if (replacements.length === 0) return source;
+
+	// Apply back-to-front so earlier offsets are not invalidated.
+	replacements.sort((a, b) => b.start - a.start);
+	let result = source;
+	for (const r of replacements) {
+		result = result.slice(0, r.start) + r.text + result.slice(r.end);
+	}
+	return result;
+}
+
+// ─────────────────────────────────────────────────────────────
+// removeConnectionEntry
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Removes a specific element from a specific step's nextSteps /
+ * synchronousNextSteps array.
+ *
+ * - removal.synchronous  → look in synchronousNextSteps
+ * - removal.isDisable    → look in nextSteps for { step: toVar, type: TransitionType.disable }
+ * - otherwise            → look in nextSteps for bare identifier toVar
+ */
+function removeConnectionEntry(
+	source: string,
+	filePath: string,
+	removal: RemovedConnectionDraft,
+): string {
+	const fromVar = removal.fromVariableName;
+	const toVar = removal.toVariableName;
+	if (!fromVar || !toVar) return source;
+
+	const propName = removal.synchronous ? "synchronousNextSteps" : "nextSteps";
+
+	const sf = ts.createSourceFile(
+		filePath,
+		source,
+		ts.ScriptTarget.ES2022,
+		true,
+	);
+
+	let result = source;
+
+	function visit(node: ts.Node): void {
+		// Find the VariableDeclaration for fromVar
+		if (
+			ts.isVariableDeclaration(node) &&
+			ts.isIdentifier(node.name) &&
+			node.name.text === fromVar &&
+			node.initializer
+		) {
+			// Locate the createStep argument object
+			const argRef: { value: ts.ObjectLiteralExpression | null } = {
+				value: null,
+			};
+			function findArg(n: ts.Node): void {
+				if (argRef.value) return;
+				if (
+					ts.isCallExpression(n) &&
+					n.arguments.length > 0 &&
+					ts.isObjectLiteralExpression(n.arguments[0])
+				) {
+					const expr = n.expression;
+					const isCS =
+						(ts.isPropertyAccessExpression(expr) &&
+							expr.name.text === "createStep") ||
+						(ts.isIdentifier(expr) && expr.text === "createStep");
+					if (isCS) argRef.value = n.arguments[0] as ts.ObjectLiteralExpression;
+				}
+				ts.forEachChild(n, findArg);
+			}
+			findArg(node.initializer);
+
+			const obj = argRef.value;
+			if (!obj) return;
+
+			// Find the target property
+			const prop = obj.properties.find(
+				(p): p is ts.PropertyAssignment =>
+					ts.isPropertyAssignment(p) &&
+					ts.isIdentifier(p.name) &&
+					p.name.text === propName,
+			);
+			if (!prop || !ts.isArrayLiteralExpression(prop.initializer)) return;
+
+			const arr = prop.initializer;
+			const elems = arr.elements;
+
+			for (let i = 0; i < elems.length; i++) {
+				const el = elems[i];
+				let matches = false;
+
+				if (removal.isDisable) {
+					// Match { step: toVar, type: TransitionType.disable } objects
+					if (ts.isObjectLiteralExpression(el)) {
+						const stepProp = el.properties.find(
+							(p): p is ts.PropertyAssignment =>
+								ts.isPropertyAssignment(p) &&
+								ts.isIdentifier(p.name) &&
+								p.name.text === "step" &&
+								ts.isIdentifier(p.initializer) &&
+								p.initializer.text === toVar,
+						);
+						if (stepProp) matches = true;
+					}
+				} else {
+					// Match bare identifier or { step: toVar } without disable
+					if (ts.isIdentifier(el) && el.text === toVar) {
+						matches = true;
+					} else if (ts.isObjectLiteralExpression(el)) {
+						const stepProp = el.properties.find(
+							(p): p is ts.PropertyAssignment =>
+								ts.isPropertyAssignment(p) &&
+								ts.isIdentifier(p.name) &&
+								p.name.text === "step" &&
+								ts.isIdentifier(p.initializer) &&
+								p.initializer.text === toVar,
+						);
+						if (stepProp) matches = true;
+					}
+				}
+
+				if (!matches) continue;
+
+				// Compute removal range
+				let removeStart: number;
+				let removeEnd: number;
+
+				if (elems.length === 1) {
+					removeStart = arr.getStart(sf) + 1;
+					removeEnd = arr.getEnd() - 1;
+				} else if (i < elems.length - 1) {
+					removeStart = el.getFullStart();
+					removeEnd = elems[i + 1].getFullStart();
+				} else {
+					removeStart = elems[i - 1].getEnd();
+					removeEnd = el.getEnd();
+				}
+
+				result = result.slice(0, removeStart) + result.slice(removeEnd);
+				return; // only remove first match per call
+			}
+		}
+		ts.forEachChild(node, visit);
+	}
+
+	visit(sf);
+	return result;
 }

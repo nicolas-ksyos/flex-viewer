@@ -243,15 +243,43 @@ export interface StepEditDraft {
 	fields: EditableStepFields;
 }
 
-/**
- * Union of all pending-change kinds used in edit mode.
- * Replaces the old flat StepPendingChange[] in the hook state.
- */
+/** A pending deletion of an existing workflow step */
+export interface DeletedBlockDraft {
+	kind: "delete-step";
+	stepId: string;
+	stepName: string;
+	/** TS variable name in the seed file, e.g. 'closeProcessStep' */
+	variableName: string;
+	/** IDs of steps whose nextSteps/transitions reference this block */
+	impactedStepIds: string[];
+	/** Display names of impacted steps (for sidebar UI) */
+	impactedStepNames: string[];
+}
+
+/** Removal of an existing nextSteps / synchronousNextSteps / disable-transition entry */
+export interface RemovedConnectionDraft {
+	kind: "remove-connection";
+	tempId: string;
+	fromStepId: string;
+	fromStepName: string;
+	/** TS variable name of the source step */
+	fromVariableName: string;
+	toStepId: string;
+	toStepName: string;
+	/** TS variable name of the target step */
+	toVariableName: string;
+	synchronous: boolean;
+	/** true = TransitionType.disable entry, not a regular nextStep */
+	isDisable: boolean;
+}
+
 export type PendingChangeItem =
 	| StepEditDraft
 	| NewStepDraft
 	| NewConnectionDraft
-	| NewTransitionDraft;
+	| NewTransitionDraft
+	| DeletedBlockDraft
+	| RemovedConnectionDraft;
 
 /** Body sent to PATCH /api/seeds/:fileName */
 export interface SeedPatchRequest {
@@ -259,6 +287,8 @@ export interface SeedPatchRequest {
 	newSteps?: NewStepDraft[];
 	newConnections?: NewConnectionDraft[];
 	newTransitions?: NewTransitionDraft[];
+	deletedSteps?: DeletedBlockDraft[];
+	removedConnections?: RemovedConnectionDraft[];
 	/**
 	 * Variable-name map for all steps in the workflow (existing + new drafts).
 	 * Required when newSteps / newConnections / newTransitions are present so

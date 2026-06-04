@@ -5,7 +5,10 @@ import { readConfig } from "../config.js";
 import { discoverSeedFiles } from "../seedDiscovery.js";
 import { parseSeedFile, getSeedRelativePath } from "../seedAstParser.js";
 import { patchSeedFile } from "../seedWriter.js";
-import { appendNewItemsToSeedFile } from "../seedWriterNew.js";
+import {
+	appendNewItemsToSeedFile,
+	deleteBlocksAndRemoveConnections,
+} from "../seedWriterNew.js";
 import type { SeedPatchRequest } from "../../shared/types.js";
 
 const router = Router();
@@ -109,6 +112,19 @@ router.patch("/seeds/:fileName", (req, res) => {
 				body.newConnections ?? [],
 				body.newTransitions ?? [],
 				stepVarNames,
+			);
+		}
+
+		// 3. Delete steps and remove connections
+		const hasDeletions =
+			(body.deletedSteps && body.deletedSteps.length > 0) ||
+			(body.removedConnections && body.removedConnections.length > 0);
+
+		if (hasDeletions) {
+			deleteBlocksAndRemoveConnections(
+				filePath,
+				body.deletedSteps ?? [],
+				body.removedConnections ?? [],
 			);
 		}
 

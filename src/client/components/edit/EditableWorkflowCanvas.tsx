@@ -1,5 +1,5 @@
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import "./EditableWorkflowCanvas.css";
 import type {
 	ParsedWorkflowDefinition,
@@ -11,6 +11,8 @@ import type {
 	EditableStepFields,
 	NewConnectionDraft,
 	BlockParameterSchemas,
+	DeletedBlockDraft,
+	RemovedConnectionDraft,
 } from "../../../shared/types";
 import { BlockSettingsPopover } from "./BlockSettingsPopover";
 
@@ -252,6 +254,10 @@ interface WorkflowBlockProps {
 	isDragging: boolean;
 	isHovered: boolean;
 	isHighlighted: boolean;
+	/** True when this step is pending deletion */
+	isDeleted: boolean;
+	/** True when this step is impacted by a pending deletion (incoming dep) */
+	isImpacted: boolean;
 	readOnly: boolean;
 	onMouseDown: (e: React.MouseEvent) => void;
 	onMouseEnter: () => void;
@@ -266,6 +272,8 @@ function WorkflowBlock({
 	isDragging,
 	isHovered,
 	isHighlighted,
+	isDeleted,
+	isImpacted,
 	readOnly,
 	onMouseDown,
 	onMouseEnter,
@@ -285,7 +293,13 @@ function WorkflowBlock({
 		top: pixelY,
 		width: BLOCK_WIDTH,
 		height: BLOCK_HEIGHT,
-		cursor: readOnly ? "default" : isDragging ? "grabbing" : "grab",
+		cursor: isDeleted
+			? "not-allowed"
+			: readOnly
+				? "default"
+				: isDragging
+					? "grabbing"
+					: "grab",
 		userSelect: "none",
 		// Elevate dragging block above siblings
 		zIndex: isDragging ? 100 : 1,
@@ -295,6 +309,67 @@ function WorkflowBlock({
 		// than the rectangular 180×90 bounding box.
 		willChange: isDragging ? "left, top" : undefined,
 	};
+
+	// Deleted block overlay and badge
+	const deletedOverlay = isDeleted ? (
+		<>
+			<div
+				style={{
+					position: "absolute",
+					inset: 0,
+					background: "rgba(220,38,38,0.18)",
+					zIndex: 3,
+					pointerEvents: "none",
+					borderRadius: "inherit",
+				}}
+			/>
+			<div
+				style={{
+					position: "absolute",
+					top: 3,
+					left: 3,
+					zIndex: 4,
+					background: "#dc2626",
+					color: "white",
+					fontSize: 8,
+					fontWeight: 700,
+					letterSpacing: "0.05em",
+					padding: "1px 4px",
+					borderRadius: 3,
+					pointerEvents: "none",
+				}}
+			>
+				DELETED
+			</div>
+		</>
+	) : null;
+
+	// Impacted block indicator — amber exclamation at top-left
+	const impactedBadge =
+		isImpacted && !isDeleted ? (
+			<div
+				style={{
+					position: "absolute",
+					top: 3,
+					left: 3,
+					width: 16,
+					height: 16,
+					borderRadius: "50%",
+					background: "#f59e0b",
+					color: "white",
+					fontSize: 10,
+					fontWeight: 900,
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "center",
+					zIndex: 2,
+					pointerEvents: "none",
+				}}
+				title="This block is impacted by a pending deletion"
+			>
+				!
+			</div>
+		) : null;
 
 	// Centred text layer sits above the shape layer
 	const textLayerStyle: React.CSSProperties = {
@@ -340,9 +415,9 @@ function WorkflowBlock({
 		</div>
 	);
 
-	// 'i' info icon — shown on hover, hidden while dragging, read-only, or new blocks
+	// 'i' info icon — shown on hover, hidden while dragging, read-only, new blocks, or deleted
 	const infoIcon =
-		!readOnly && !step.isNew && isHovered && !isDragging ? (
+		!readOnly && !step.isNew && !isDeleted && isHovered && !isDragging ? (
 			<button
 				onMouseDown={(e) => e.stopPropagation()}
 				onClick={(e) => {
@@ -401,7 +476,7 @@ function WorkflowBlock({
 
 	const sharedOuterProps = {
 		style: outerStyle,
-		onMouseDown: readOnly ? undefined : onMouseDown,
+		onMouseDown: readOnly || isDeleted ? undefined : onMouseDown,
 		onMouseEnter,
 		onMouseLeave,
 	};
@@ -413,7 +488,7 @@ function WorkflowBlock({
 		return (
 			<div
 				style={outerStyle}
-				onMouseDown={readOnly ? undefined : onMouseDown}
+				onMouseDown={readOnly || isDeleted ? undefined : onMouseDown}
 				onMouseEnter={onMouseEnter}
 				onMouseLeave={onMouseLeave}
 			>
@@ -433,6 +508,8 @@ function WorkflowBlock({
 					}}
 				/>
 				{newBadge}
+				{deletedOverlay}
+				{impactedBadge}
 				{textContent}
 				{infoIcon}
 			</div>
@@ -477,6 +554,8 @@ function WorkflowBlock({
 					/>
 				</svg>
 				{newBadge}
+				{deletedOverlay}
+				{impactedBadge}
 				{textContent}
 				{infoIcon}
 			</div>
@@ -502,6 +581,8 @@ function WorkflowBlock({
 				}}
 			/>
 			{newBadge}
+			{deletedOverlay}
+			{impactedBadge}
 			{textContent}
 			{infoIcon}
 		</div>
@@ -517,6 +598,10 @@ interface TransitionLinesProps {
 	centerMap: Map<string, BlockInfo>;
 	canvasWidth: number;
 	canvasHeight: number;
+	/** IDs of steps that are pending deletion */
+	deletedStepIds: Set<string>;
+	/** "fromId-toId" keys for connections pending removal */
+	removedConnectionKeys: Set<string>;
 }
 
 function TransitionLines({
@@ -524,6 +609,8 @@ function TransitionLines({
 	centerMap,
 	canvasWidth,
 	canvasHeight,
+	deletedStepIds,
+	removedConnectionKeys,
 }: TransitionLinesProps) {
 	return (
 		<svg
@@ -580,16 +667,67 @@ function TransitionLines({
 				// Derive colour and marker from type (disable takes priority) and synchronous flag
 				const isDisable = t.type === "disable";
 				const isSynchronous = t.synchronous;
-				const strokeColor = isDisable
-					? "#EE1111"
-					: isSynchronous
-						? "#FF37F0"
-						: "#FF9A1E";
-				const markerId = isDisable
-					? "ewa-arrow-disable"
-					: isSynchronous
-						? "ewa-arrow-sync"
-						: "ewa-arrow-async";
+
+				// Visual overrides for deleted endpoints or pending-removal connections
+				const endpointDeleted =
+					deletedStepIds.has(t.fromStepId) || deletedStepIds.has(t.toStepId);
+				const connectionKey = `${t.fromStepId}-${t.toStepId}`;
+				const isPendingRemoval = removedConnectionKeys.has(connectionKey);
+
+				let strokeColor: string;
+				let strokeDasharray: string | undefined;
+				let strokeOpacity: number;
+				let markerId: string;
+
+				if (endpointDeleted) {
+					// Lines connected to a deleted block: dashed red
+					strokeColor = "#dc2626";
+					strokeDasharray = "8 4";
+					strokeOpacity = 0.5;
+					markerId = "ewa-arrow-disable"; // reuse red arrowhead
+				} else if (isPendingRemoval) {
+					// Lines pending removal: dashed grey
+					strokeColor = "#9ca3af";
+					strokeDasharray = "4 4";
+					strokeOpacity = 0.4;
+					markerId = "ewa-arrow-async"; // reuse orange arrowhead (visually muted by opacity)
+				} else if (t.isNew) {
+					// New (draft) lines: dashed with original colour
+					strokeColor = isDisable
+						? "#EE1111"
+						: isSynchronous
+							? "#FF37F0"
+							: "#FF9A1E";
+					strokeDasharray = "6 3";
+					strokeOpacity = 1;
+					markerId = isDisable
+						? "ewa-arrow-disable"
+						: isSynchronous
+							? "ewa-arrow-sync"
+							: "ewa-arrow-async";
+				} else {
+					// Normal line
+					strokeColor = isDisable
+						? "#EE1111"
+						: isSynchronous
+							? "#FF37F0"
+							: "#FF9A1E";
+					strokeDasharray = undefined;
+					strokeOpacity = 1;
+					markerId = isDisable
+						? "ewa-arrow-disable"
+						: isSynchronous
+							? "ewa-arrow-sync"
+							: "ewa-arrow-async";
+				}
+
+				const lineAttrs = {
+					stroke: strokeColor,
+					strokeWidth: 2,
+					...(strokeDasharray ? { strokeDasharray } : {}),
+					...(strokeOpacity < 1 ? { opacity: strokeOpacity } : {}),
+					markerEnd: `url(#${markerId})`,
+				};
 
 				// Self-transition: draw a small cubic-Bezier arc above the block
 				if (t.fromStepId === t.toStepId) {
@@ -600,17 +738,7 @@ function TransitionLines({
 					const loopX2 = cx + loopR;
 					const loopArcY = topY - loopR * 1.2;
 					const path = `M ${loopX1} ${topY} C ${loopX1} ${loopArcY}, ${loopX2} ${loopArcY}, ${loopX2} ${topY}`;
-					return (
-						<path
-							key={t.id}
-							d={path}
-							fill="none"
-							stroke={strokeColor}
-							strokeWidth={2}
-							{...(t.isNew ? { strokeDasharray: "6 3" } : {})}
-							markerEnd={`url(#${markerId})`}
-						/>
-					);
+					return <path key={t.id} d={path} fill="none" {...lineAttrs} />;
 				}
 
 				// Direction vector from source centre to target centre
@@ -644,16 +772,7 @@ function TransitionLines({
 
 				return (
 					<g key={t.id}>
-						<line
-							x1={x1}
-							y1={y1}
-							x2={x2}
-							y2={y2}
-							stroke={strokeColor}
-							strokeWidth={2}
-							{...(t.isNew ? { strokeDasharray: "6 3" } : {})}
-							markerEnd={`url(#${markerId})`}
-						/>
+						<line x1={x1} y1={y1} x2={x2} y2={y2} {...lineAttrs} />
 						{t.onlyIfOutputEquals && (
 							<text
 								x={midX}
@@ -692,6 +811,41 @@ export function EditableWorkflowCanvas({
 	onParametersChange,
 }: EditableWorkflowCanvasProps) {
 	const zoom = zoomLevel ?? 1;
+
+	// ── Deleted / impacted / removed-connection Sets ─────────
+	// Derived from pendingChanges; used by WorkflowBlock and TransitionLines
+	// to apply visual overrides without altering workflow data.
+	const deletedStepIds = useMemo(
+		() =>
+			new Set(
+				pendingChanges
+					.filter((c): c is DeletedBlockDraft => c.kind === "delete-step")
+					.map((c) => c.stepId),
+			),
+		[pendingChanges],
+	);
+
+	const impactedStepIds = useMemo(
+		() =>
+			new Set(
+				pendingChanges
+					.filter((c): c is DeletedBlockDraft => c.kind === "delete-step")
+					.flatMap((c) => c.impactedStepIds),
+			),
+		[pendingChanges],
+	);
+
+	const removedConnectionKeys = useMemo(
+		() =>
+			new Set(
+				pendingChanges
+					.filter(
+						(c): c is RemovedConnectionDraft => c.kind === "remove-connection",
+					)
+					.map((c) => `${c.fromStepId}-${c.toStepId}`),
+			),
+		[pendingChanges],
+	);
 
 	// ── Internal drag state ───────────────────────────────────
 	const [dragState, setDragState] = useState<DragState | null>(null);
@@ -844,6 +998,8 @@ export function EditableWorkflowCanvas({
 				centerMap={centerMap}
 				canvasWidth={canvasWidth}
 				canvasHeight={canvasHeight}
+				deletedStepIds={deletedStepIds}
+				removedConnectionKeys={removedConnectionKeys}
 			/>
 
 			{/* Block layer */}
@@ -856,6 +1012,8 @@ export function EditableWorkflowCanvas({
 					isDragging={activeDraggingStepId === step.id}
 					isHovered={hoveredStepId === step.id}
 					isHighlighted={highlightedStepId === step.id}
+					isDeleted={deletedStepIds.has(step.id)}
+					isImpacted={impactedStepIds.has(step.id)}
 					readOnly={readOnly}
 					onMouseDown={(e) => handleBlockMouseDown(e, step)}
 					onMouseEnter={() => setHoveredStepId(step.id)}

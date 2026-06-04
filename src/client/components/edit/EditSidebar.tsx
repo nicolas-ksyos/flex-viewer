@@ -5,6 +5,8 @@ import type {
 	NewStepDraft,
 	NewConnectionDraft,
 	NewTransitionDraft,
+	DeletedBlockDraft,
+	RemovedConnectionDraft,
 	PendingChangeItem,
 	SeedPatchRequest,
 	SeedPatchResponse,
@@ -311,6 +313,12 @@ export function EditSidebar({
 			const newTransitions = pendingChanges.filter(
 				(c): c is NewTransitionDraft => c.kind === "new-transition",
 			);
+			const deletedSteps = pendingChanges.filter(
+				(c): c is DeletedBlockDraft => c.kind === "delete-step",
+			);
+			const removedConnections = pendingChanges.filter(
+				(c): c is RemovedConnectionDraft => c.kind === "remove-connection",
+			);
 			const body: SeedPatchRequest = {
 				changes: editItems.map((c) => ({
 					stepId: c.stepId,
@@ -320,6 +328,8 @@ export function EditSidebar({
 				...(newSteps.length > 0 ? { newSteps } : {}),
 				...(newConnections.length > 0 ? { newConnections } : {}),
 				...(newTransitions.length > 0 ? { newTransitions } : {}),
+				...(deletedSteps.length > 0 ? { deletedSteps } : {}),
+				...(removedConnections.length > 0 ? { removedConnections } : {}),
 				// Send ALL steps: use parsed variableName when available, otherwise
 				// derive one from the step name. This ensures every step ID in
 				// nextStepIds / synchronousNextStepIds can be resolved server-side.
