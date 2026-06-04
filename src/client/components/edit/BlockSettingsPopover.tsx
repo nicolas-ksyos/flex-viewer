@@ -5,8 +5,8 @@ import type {
 	ParsedWorkflowActivity,
 	EditableStepFields,
 	NewConnectionDraft,
+	RemovedConnectionDraft,
 	BlockParameterSchema,
-	BlockParameterField,
 } from "../../../shared/types";
 import { BLOCK_NAMES } from "../../../shared/blockTypes";
 
@@ -239,6 +239,12 @@ export interface BlockSettingsPopoverProps {
 	allTransitions?: ParsedWorkflowTransition[];
 	/** Called when user checks a new connection in the popover */
 	onAddConnection?: (draft: Omit<NewConnectionDraft, "kind">) => void;
+	/** Called when the × button is clicked on an existing connection */
+	onRemoveConnection?: (draft: Omit<RemovedConnectionDraft, "kind">) => void;
+	/** Called when the ↩ undo button is clicked on a pending-removal connection */
+	onUndoRemoveConnection?: (tempId: string) => void;
+	/** Set of "fromId-toId" keys for connections that are pending removal */
+	pendingRemovedConnectionKeys?: Set<string>;
 	/** Block parameter schema from the analyzer — drives typed parameter editor */
 	blockParameterSchema?: BlockParameterSchema;
 	/** Called when parameters are changed via the typed editor */
@@ -256,6 +262,9 @@ export function BlockSettingsPopover({
 	allSteps,
 	allTransitions,
 	onAddConnection,
+	onRemoveConnection,
+	onUndoRemoveConnection,
+	pendingRemovedConnectionKeys,
 	blockParameterSchema,
 	onParametersChange,
 	allActivities,
@@ -535,42 +544,99 @@ export function BlockSettingsPopover({
 					{outgoing.length > 0 && (
 						<div style={{ marginBottom: 10 }}>
 							<label style={smallLabelStyle}>Current outgoing:</label>
-							{outgoing.map((t) => {
-								const target = (allSteps ?? []).find(
-									(s) => s.id === t.toStepId,
-								);
-								const color =
-									t.type === "disable"
-										? "#EE1111"
-										: t.synchronous
-											? "#FF37F0"
-											: "#FF9A1E";
-								const tag =
-									t.type === "disable"
-										? "disable"
-										: t.synchronous
-											? "sync"
-											: "async";
-								return (
-									<div
-										key={t.id}
-										style={{ fontSize: 11, color, marginBottom: 3 }}
+					{outgoing.map((t) => {
+						const target = (allSteps ?? []).find(
+							(s) => s.id === t.toStepId,
+						);
+						const color =
+							t.type === "disable"
+								? "#EE1111"
+								: t.synchronous
+									? "#FF37F0"
+									: "#FF9A1E";
+						const tag =
+							t.type === "disable"
+								? "disable"
+								: t.synchronous
+									? "sync"
+									: "async";
+						const connKey = `${t.fromStepId}-${t.toStepId}`;
+						const isPendingRemoval = pendingRemovedConnectionKeys?.has(connKey) ?? false;
+						return (
+							<div
+								key={t.id}
+								style={{
+									display: "flex",
+									alignItems: "center",
+									gap: 4,
+									marginBottom: 3,
+									color: isPendingRemoval ? "#9ca3af" : color,
+									opacity: isPendingRemoval ? 0.6 : 1,
+								}}
+							>
+								<span
+									style={{
+										flex: 1,
+										fontSize: 11,
+										textDecoration: isPendingRemoval ? "line-through" : "none",
+									}}
+								>
+									→ {target?.name ?? t.toStepId}{" "}
+									<span
+										style={{
+											background: (isPendingRemoval ? "#9ca3af" : color) + "22",
+											border: `1px solid ${isPendingRemoval ? "#9ca3af" : color}`,
+											borderRadius: 3,
+											padding: "0 4px",
+											fontSize: 10,
+										}}
 									>
-										→ {target?.name ?? t.toStepId}{" "}
-										<span
-											style={{
-												background: color + "22",
-												border: `1px solid ${color}`,
-												borderRadius: 3,
-												padding: "0 4px",
-												fontSize: 10,
-											}}
-										>
-											{tag}
-										</span>
-									</div>
-								);
-							})}
+										{tag}
+									</span>
+								</span>
+								{/* Remove or undo button */}
+								{isPendingRemoval ? (
+									<button
+										onClick={() => onUndoRemoveConnection?.(`rm-conn-${t.id}`)}
+										title="Undo removal"
+										style={{
+											background: "none", border: "none", cursor: "pointer",
+											color: "#6b7280", fontSize: 12, padding: "0 2px",
+											flexShrink: 0, lineHeight: 1,
+										}}
+									>
+										↩
+									</button>
+								) : onRemoveConnection ? (
+									<button
+										onClick={() =>
+											onRemoveConnection({
+												tempId: `rm-conn-${t.id}`,
+												fromStepId: step.id,
+												fromStepName: step.name,
+												fromVariableName: step.variableName ?? "",
+												toStepId: t.toStepId,
+												toStepName: target?.name ?? t.toStepId,
+												toVariableName: target?.variableName ?? "",
+												synchronous: t.synchronous,
+												isDisable: t.type === "disable",
+											})
+										}
+										title="Remove this connection"
+										style={{
+											background: "none", border: "none", cursor: "pointer",
+											color: "#9ca3af", fontSize: 14, padding: "0 2px",
+											flexShrink: 0, lineHeight: 1,
+										}}
+										onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#374151"; }}
+										onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#9ca3af"; }}
+									>
+										×
+									</button>
+								) : null}
+							</div>
+						);
+					})}
 						</div>
 					)}
 

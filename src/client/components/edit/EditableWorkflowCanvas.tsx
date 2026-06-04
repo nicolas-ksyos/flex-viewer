@@ -139,6 +139,14 @@ export interface EditableWorkflowCanvasProps {
 	) => void;
 	/** Called when a new connection is created from the settings popover */
 	onAddConnectionDraft?: (draft: Omit<NewConnectionDraft, "kind">) => void;
+	/** Called when the trash icon is clicked to mark a block for deletion */
+	onDeleteBlock?: (step: ParsedWorkflowStep) => void;
+	/** Called when the undo icon is clicked to cancel a pending deletion */
+	onUndoDeleteBlock?: (stepId: string) => void;
+	/** Called when × is clicked on an existing connection in the popover */
+	onRemoveConnection?: (draft: Omit<RemovedConnectionDraft, "kind">) => void;
+	/** Called when ↩ is clicked to undo a pending connection removal */
+	onUndoRemoveConnection?: (tempId: string) => void;
 	/** CSS transform scale applied to the canvas content (default: 1) */
 	zoomLevel?: number;
 	/** Step ID to highlight with a subtle blue glow (from sidebar hover) */
@@ -263,6 +271,10 @@ interface WorkflowBlockProps {
 	onMouseEnter: () => void;
 	onMouseLeave: () => void;
 	onInfoIconClick: () => void;
+	/** Called when trash icon is clicked (mark for deletion) */
+	onDeleteClick?: () => void;
+	/** Called when undo icon is clicked (cancel pending deletion) */
+	onUndoClick?: () => void;
 }
 
 function WorkflowBlock({
@@ -279,6 +291,8 @@ function WorkflowBlock({
 	onMouseEnter,
 	onMouseLeave,
 	onInfoIconClick,
+	onDeleteClick,
+	onUndoClick,
 }: WorkflowBlockProps) {
 	const styles =
 		BLOCK_TYPE_STYLES[step.serviceWorkflowBlock.type] ?? DEFAULT_STYLE;
@@ -474,6 +488,54 @@ function WorkflowBlock({
 		</div>
 	) : null;
 
+	// Trash icon — shown on hover of non-deleted, non-new blocks in edit mode
+	const trashIcon =
+		!readOnly && !step.isNew && !isDeleted && isHovered && !isDragging && onDeleteClick ? (
+			<button
+				onMouseDown={(e) => e.stopPropagation()}
+				onClick={(e) => { e.stopPropagation(); onDeleteClick(); }}
+				style={{
+					position: "absolute", top: 4, right: 26,
+					width: 18, height: 18, borderRadius: "50%",
+					border: "1px solid #dc2626", background: "rgba(255,255,255,0.85)",
+					cursor: "pointer", display: "flex", alignItems: "center",
+					justifyContent: "center", padding: 0, color: "#dc2626",
+					opacity: 0.8, zIndex: 2,
+				}}
+				title="Delete block"
+				aria-label="Delete block"
+			>
+				<svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+					<line x1="1" y1="3" x2="9" y2="3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+					<rect x="2" y="3" width="6" height="5.5" rx="0.5" stroke="currentColor" strokeWidth="1.1" />
+					<line x1="4" y1="3" x2="4" y2="8" stroke="currentColor" strokeWidth="0.9" />
+					<line x1="6" y1="3" x2="6" y2="8" stroke="currentColor" strokeWidth="0.9" />
+					<path d="M3.5 3V2C3.5 1.72 3.72 1.5 4 1.5H6C6.28 1.5 6.5 1.72 6.5 2V3" stroke="currentColor" strokeWidth="1" />
+				</svg>
+			</button>
+		) : null;
+
+	// Undo icon — shown on hover of deleted blocks to cancel the pending deletion
+	const undoIcon =
+		!readOnly && isDeleted && isHovered && onUndoClick ? (
+			<button
+				onMouseDown={(e) => e.stopPropagation()}
+				onClick={(e) => { e.stopPropagation(); onUndoClick(); }}
+				style={{
+					position: "absolute", top: 4, right: 26,
+					width: 18, height: 18, borderRadius: "50%",
+					border: "1px solid #9ca3af", background: "rgba(255,255,255,0.85)",
+					cursor: "pointer", fontSize: 12, fontWeight: 700,
+					display: "flex", alignItems: "center", justifyContent: "center",
+					padding: 0, zIndex: 2, color: "#6b7280", lineHeight: 1,
+				}}
+				title="Undo deletion"
+				aria-label="Undo deletion"
+			>
+				↩
+			</button>
+		) : null;
+
 	const sharedOuterProps = {
 		style: outerStyle,
 		onMouseDown: readOnly || isDeleted ? undefined : onMouseDown,
@@ -512,6 +574,8 @@ function WorkflowBlock({
 				{impactedBadge}
 				{textContent}
 				{infoIcon}
+				{trashIcon}
+				{undoIcon}
 			</div>
 		);
 	}
@@ -558,6 +622,8 @@ function WorkflowBlock({
 				{impactedBadge}
 				{textContent}
 				{infoIcon}
+				{trashIcon}
+				{undoIcon}
 			</div>
 		);
 	}
@@ -585,8 +651,10 @@ function WorkflowBlock({
 			{impactedBadge}
 			{textContent}
 			{infoIcon}
+			{trashIcon}
+			{undoIcon}
 		</div>
-	);
+);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -809,6 +877,10 @@ export function EditableWorkflowCanvas({
 	blockParameterSchemas,
 	allActivities,
 	onParametersChange,
+	onDeleteBlock,
+	onUndoDeleteBlock,
+	onRemoveConnection,
+	onUndoRemoveConnection,
 }: EditableWorkflowCanvasProps) {
 	const zoom = zoomLevel ?? 1;
 
@@ -1022,6 +1094,12 @@ export function EditableWorkflowCanvas({
 						setOpenPopoverStepId((prev) => (prev === step.id ? null : step.id));
 						onInfoIconClick?.(step);
 					}}
+					onDeleteClick={
+						onDeleteBlock ? () => onDeleteBlock(step) : undefined
+					}
+					onUndoClick={
+						onUndoDeleteBlock ? () => onUndoDeleteBlock(step.id) : undefined
+					}
 				/>
 			))}
 
@@ -1057,6 +1135,9 @@ export function EditableWorkflowCanvas({
 							allSteps={workflow.steps}
 							allTransitions={workflow.transitions}
 							onAddConnection={onAddConnectionDraft}
+							onRemoveConnection={onRemoveConnection}
+							onUndoRemoveConnection={onUndoRemoveConnection}
+							pendingRemovedConnectionKeys={removedConnectionKeys}
 							blockParameterSchema={
 								blockParameterSchemas?.[popStep.serviceWorkflowBlock.name]
 							}

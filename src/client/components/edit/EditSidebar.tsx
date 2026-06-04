@@ -370,9 +370,16 @@ export function EditSidebar({
 	const newTransItems = pendingChanges.filter(
 		(c): c is NewTransitionDraft => c.kind === "new-transition",
 	);
+	const deletedStepItems = pendingChanges.filter(
+		(c): c is DeletedBlockDraft => c.kind === "delete-step",
+	);
+	const removedConnItems = pendingChanges.filter(
+		(c): c is RemovedConnectionDraft => c.kind === "remove-connection",
+	);
 	const hasAdditions =
 		newStepItems.length + newConnItems.length + newTransItems.length > 0;
 	const hasEdits = editChanges.length > 0;
+	const hasDeletions = deletedStepItems.length + removedConnItems.length > 0;
 	const hasChanges = pendingChanges.length > 0;
 
 	return (
@@ -472,7 +479,50 @@ export function EditSidebar({
 							</div>
 						)}
 
-						{/* ── Edits section ─────────────────────────────── */}
+										{/* ── Deletions section ───────────────────── */}
+							{hasDeletions && (
+								<div style={{ marginBottom: 12 }}>
+									<Text
+										size="xs"
+										color="subtle"
+										style={{
+											fontWeight: 600,
+											textTransform: "uppercase",
+											letterSpacing: "0.05em",
+											marginBottom: 6,
+											display: "block",
+										}}
+									>
+										Deletions
+									</Text>
+									{deletedStepItems.map((draft) => (
+										<NewItemEntry
+											key={draft.stepId}
+											badge={{ text: "DELETE", color: "#dc2626" }}
+											label={draft.stepName}
+											detail={
+												draft.impactedStepNames.length > 0
+													? `Impacts: ${draft.impactedStepNames.join(", ")}`
+													: "No dependencies impacted"
+											}
+											onRemove={() => onRemoveNewItem?.(draft.stepId)}
+										/>
+									))}
+									{removedConnItems.map((draft) => (
+										<NewItemEntry
+											key={draft.tempId}
+											badge={{ text: "REMOVE", color: "#f59e0b" }}
+											label={`${draft.fromStepName} → ${draft.toStepName}`}
+											detail={
+												draft.isDisable ? "disable" : draft.synchronous ? "sync" : "async"
+											}
+											onRemove={() => onRemoveNewItem?.(draft.tempId)}
+										/>
+									))}
+								</div>
+							)}
+
+			{/* ── Edits section ─────────────────────────── */}
 						{hasEdits && (
 							<div>
 								{hasAdditions && (

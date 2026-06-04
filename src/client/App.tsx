@@ -110,6 +110,10 @@ export function App() {
 		addNewConnection,
 		addNewTransition,
 		removeNewItem,
+		recordBlockDeletion,
+		undoBlockDeletion,
+		recordConnectionRemoval,
+		undoConnectionRemoval,
 	} = useEditMode();
 
 	const {
@@ -127,6 +131,7 @@ export function App() {
 		exitEditMode();
 		setSidebarVisible(true);
 		setHighlightedStepId(null);
+		setParseResult(null); // reset so the loading indicator shows while the file watcher re-parses
 	}, [exitEditMode]);
 
 	// ── Lifecycle effects ─────────────────────────────────────────
@@ -409,6 +414,12 @@ export function App() {
 									onParametersChange={(step, params) => {
 										recordFieldChange(step, "parameters", params as any);
 									}}
+									onDeleteBlock={(step) =>
+										recordBlockDeletion(step, currentWorkflow.workflow)
+									}
+									onUndoDeleteBlock={undoBlockDeletion}
+									onRemoveConnection={recordConnectionRemoval}
+									onUndoRemoveConnection={undoConnectionRemoval}
 								/>
 
 								{/* Always-visible toggle — lives outside the sidebar so overflow:hidden never clips it */}

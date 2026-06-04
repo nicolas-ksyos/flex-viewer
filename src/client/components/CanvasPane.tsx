@@ -6,6 +6,7 @@ import type {
 	EditableStepFields,
 	PendingChangeItem,
 	NewConnectionDraft,
+	RemovedConnectionDraft,
 	BlockParameterSchemas,
 } from "../../shared/types";
 import { EditableWorkflowCanvas } from "./edit/EditableWorkflowCanvas";
@@ -64,6 +65,14 @@ export interface CanvasPaneProps {
 		step: ParsedWorkflowStep,
 		params: Record<string, unknown> | null,
 	) => void;
+	/** Called when trash icon clicked on a block to mark it for deletion */
+	onDeleteBlock?: (step: ParsedWorkflowStep) => void;
+	/** Called when undo icon clicked to cancel a pending block deletion */
+	onUndoDeleteBlock?: (stepId: string) => void;
+	/** Called when × remove clicked on an existing connection in the popover */
+	onRemoveConnection?: (draft: Omit<RemovedConnectionDraft, "kind">) => void;
+	/** Called when ↩ undo clicked on a pending connection removal */
+	onUndoRemoveConnection?: (tempId: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -102,6 +111,10 @@ export function CanvasPane({
 	onAddConnectionDraft,
 	blockParameterSchemas,
 	onParametersChange,
+	onDeleteBlock,
+	onUndoDeleteBlock,
+	onRemoveConnection,
+	onUndoRemoveConnection,
 }: CanvasPaneProps) {
 	const [view, setView] = useState<ViewState>({ zoom: 1.0, panX: 0, panY: 0 });
 	const [showLegend, setShowLegend] = useState(false);
@@ -371,6 +384,10 @@ export function CanvasPane({
 						onParametersChange={
 							mode === "edit" ? onParametersChange : undefined
 						}
+						onDeleteBlock={mode === "edit" ? onDeleteBlock : undefined}
+						onUndoDeleteBlock={mode === "edit" ? onUndoDeleteBlock : undefined}
+						onRemoveConnection={mode === "edit" ? onRemoveConnection : undefined}
+						onUndoRemoveConnection={mode === "edit" ? onUndoRemoveConnection : undefined}
 					/>
 				</div>
 			</div>
