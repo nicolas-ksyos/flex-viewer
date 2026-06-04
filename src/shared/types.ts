@@ -112,6 +112,42 @@ export interface WsWatchStarted {
 
 export type WsMessage = WsWorkflowUpdate | WsFileError | WsWatchStarted;
 
+// ─────────────────────────────────────────────────────────────
+// Block parameter schema types (populated by the server analyzer)
+// ─────────────────────────────────────────────────────────────
+
+export type ParameterFieldType =
+	| "string"
+	| "number"
+	| "boolean"
+	| "enum" // fixed list of string literals
+	| "activity-id" // single UUID referencing a workflow activity
+	| "step-id" // single UUID referencing a workflow step
+	| "activity-id-array"
+	| "step-id-array"
+	| "string-array" // z.array(z.string())
+	| "object" // nested z.strictObject / complex
+	| "unknown";
+
+export interface BlockParameterField {
+	key: string;
+	type: ParameterFieldType;
+	/** Only present when type === 'enum' */
+	enumValues?: string[];
+	required: boolean;
+}
+
+export interface BlockParameterSchema {
+	/** camelCase block name matching BLOCK_TYPE_MAP key, e.g. 'fixedIntervalScheduler' */
+	blockName: string;
+	fields: BlockParameterField[];
+	/** true = a ParameterEditor component exists; false = block has no parameters */
+	hasEditor: boolean;
+}
+
+/** Map of blockName → BlockParameterSchema, returned by GET /api/block-parameters */
+export type BlockParameterSchemas = Record<string, BlockParameterSchema>;
+
 /** All step properties that can be edited in the seed file. */
 export interface EditableStepFields {
 	x?: number;
@@ -122,6 +158,8 @@ export interface EditableStepFields {
 	type?: string;
 	block?: string;
 	performerNeedsTask?: boolean;
+	/** Full parameters object replacement. null clears the parameters. */
+	parameters?: Record<string, unknown> | null;
 }
 
 /**

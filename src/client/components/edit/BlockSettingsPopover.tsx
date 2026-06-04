@@ -2,8 +2,11 @@ import { useEffect, useRef } from "react";
 import type {
 	ParsedWorkflowStep,
 	ParsedWorkflowTransition,
+	ParsedWorkflowActivity,
 	EditableStepFields,
 	NewConnectionDraft,
+	BlockParameterSchema,
+	BlockParameterField,
 } from "../../../shared/types";
 import { BLOCK_NAMES } from "../../../shared/blockTypes";
 
@@ -216,6 +219,364 @@ function StepCheckList({
 }
 
 // ─────────────────────────────────────────────────────────────
+// ParameterEditor — typed form fields driven by BlockParameterSchema
+// ─────────────────────────────────────────────────────────────
+
+function ParameterEditor({
+	fields,
+	parameters,
+	allSteps,
+	allActivities,
+	onChange,
+}: {
+	fields: BlockParameterField[];
+	parameters: Record<string, unknown>;
+	allSteps: ParsedWorkflowStep[];
+	allActivities: ParsedWorkflowActivity[];
+	onChange: (params: Record<string, unknown>) => void;
+}) {
+	const handleFieldChange = (key: string, value: unknown) => {
+		onChange({ ...parameters, [key]: value });
+	};
+	return (
+		<div>
+			{fields.map((field) => (
+				<ParameterField
+					key={field.key}
+					field={field}
+					value={parameters[field.key]}
+					allSteps={allSteps}
+					allActivities={allActivities}
+					onChange={(v) => handleFieldChange(field.key, v)}
+				/>
+			))}
+		</div>
+	);
+}
+
+function ParameterField({
+	field,
+	value,
+	allSteps,
+	allActivities,
+	onChange,
+}: {
+	field: BlockParameterField;
+	value: unknown;
+	allSteps: ParsedWorkflowStep[];
+	allActivities: ParsedWorkflowActivity[];
+	onChange: (v: unknown) => void;
+}) {
+	const paramLabelStyle: React.CSSProperties = {
+		display: "block",
+		fontSize: 11,
+		color: "#6b7280",
+		marginBottom: 2,
+		fontWeight: 500,
+	};
+	const paramInputStyle: React.CSSProperties = {
+		width: "100%",
+		padding: "4px 6px",
+		fontSize: 12,
+		border: "1px solid #d1d5db",
+		borderRadius: 4,
+		boxSizing: "border-box" as const,
+		background: "white",
+		fontFamily: "inherit",
+	};
+
+	const fieldLabel = (
+		<label style={paramLabelStyle}>
+			{field.key}
+			{field.required && (
+				<span style={{ color: "#ef4444", marginLeft: 2 }}>*</span>
+			)}
+		</label>
+	);
+
+	switch (field.type) {
+		case "string":
+			return (
+				<div style={{ marginBottom: 8 }}>
+					{fieldLabel}
+					<input
+						type="text"
+						value={String(value ?? "")}
+						onChange={(e) => onChange(e.target.value)}
+						style={paramInputStyle}
+					/>
+				</div>
+			);
+
+		case "number":
+			return (
+				<div style={{ marginBottom: 8 }}>
+					{fieldLabel}
+					<input
+						type="number"
+						value={value != null ? Number(value) : ""}
+						onChange={(e) => {
+							const n = parseFloat(e.target.value);
+							if (!isNaN(n)) onChange(n);
+						}}
+						style={paramInputStyle}
+					/>
+				</div>
+			);
+
+		case "boolean":
+			return (
+				<div
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: 8,
+						marginBottom: 8,
+					}}
+				>
+					<input
+						type="checkbox"
+						checked={Boolean(value)}
+						onChange={(e) => onChange(e.target.checked)}
+						style={{ width: 14, height: 14, cursor: "pointer" }}
+					/>
+					<label style={{ fontSize: 12, color: "#374151", cursor: "pointer" }}>
+						{field.key}
+					</label>
+				</div>
+			);
+
+		case "enum": {
+			const enumVals = field.enumValues ?? [];
+			// If no enum values could be resolved, fall back to a plain text input
+			if (enumVals.length === 0) {
+				return (
+					<div style={{ marginBottom: 8 }}>
+						{fieldLabel}
+						<input
+							type="text"
+							value={String(value ?? "")}
+							onChange={(e) => onChange(e.target.value)}
+							style={paramInputStyle}
+						/>
+					</div>
+				);
+			}
+			return (
+				<div style={{ marginBottom: 8 }}>
+					{fieldLabel}
+					<select
+						value={String(value ?? "")}
+						onChange={(e) => onChange(e.target.value)}
+						style={{ ...paramInputStyle, cursor: "pointer" }}
+					>
+						<option value="">— select —</option>
+						{enumVals.map((v) => (
+							<option key={v} value={v}>
+								{v}
+							</option>
+						))}
+					</select>
+				</div>
+			);
+		}
+
+		case "activity-id":
+			return (
+				<div style={{ marginBottom: 8 }}>
+					{fieldLabel}
+					<select
+						value={String(value ?? "")}
+						onChange={(e) => onChange(e.target.value)}
+						style={{ ...paramInputStyle, cursor: "pointer" }}
+					>
+						<option value="">— select activity —</option>
+						{allActivities.map((a) => (
+							<option key={a.id} value={a.id}>
+								{a.label || a.name}
+							</option>
+						))}
+					</select>
+				</div>
+			);
+
+		case "step-id":
+			return (
+				<div style={{ marginBottom: 8 }}>
+					{fieldLabel}
+					<select
+						value={String(value ?? "")}
+						onChange={(e) => onChange(e.target.value)}
+						style={{ ...paramInputStyle, cursor: "pointer" }}
+					>
+						<option value="">— select step —</option>
+						{allSteps.map((s) => (
+							<option key={s.id} value={s.id}>
+								{s.label || s.name}
+							</option>
+						))}
+					</select>
+				</div>
+			);
+
+		case "activity-id-array": {
+			const selected = Array.isArray(value) ? (value as string[]) : [];
+			return (
+				<div style={{ marginBottom: 8 }}>
+					{fieldLabel}
+					<div
+						style={{
+							maxHeight: 80,
+							overflowY: "auto",
+							border: "1px solid #e5e7eb",
+							borderRadius: 4,
+							padding: "4px 6px",
+						}}
+					>
+						{allActivities.length === 0 ? (
+							<span style={{ fontSize: 11, color: "#9ca3af" }}>
+								No activities
+							</span>
+						) : (
+							allActivities.map((a) => (
+								<label
+									key={a.id}
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 6,
+										fontSize: 11,
+										cursor: "pointer",
+										padding: "1px 0",
+									}}
+								>
+									<input
+										type="checkbox"
+										checked={selected.includes(a.id)}
+										onChange={(e) => {
+											const next = e.target.checked
+												? [...selected, a.id]
+												: selected.filter((x) => x !== a.id);
+											onChange(next);
+										}}
+									/>
+									{a.label || a.name}
+								</label>
+							))
+						)}
+					</div>
+				</div>
+			);
+		}
+
+		case "step-id-array": {
+			const selected = Array.isArray(value) ? (value as string[]) : [];
+			return (
+				<div style={{ marginBottom: 8 }}>
+					{fieldLabel}
+					<div
+						style={{
+							maxHeight: 80,
+							overflowY: "auto",
+							border: "1px solid #e5e7eb",
+							borderRadius: 4,
+							padding: "4px 6px",
+						}}
+					>
+						{allSteps.length === 0 ? (
+							<span style={{ fontSize: 11, color: "#9ca3af" }}>No steps</span>
+						) : (
+							allSteps.map((s) => (
+								<label
+									key={s.id}
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 6,
+										fontSize: 11,
+										cursor: "pointer",
+										padding: "1px 0",
+									}}
+								>
+									<input
+										type="checkbox"
+										checked={selected.includes(s.id)}
+										onChange={(e) => {
+											const next = e.target.checked
+												? [...selected, s.id]
+												: selected.filter((x) => x !== s.id);
+											onChange(next);
+										}}
+									/>
+									{s.label || s.name}
+								</label>
+							))
+						)}
+					</div>
+				</div>
+			);
+		}
+
+		case "string-array": {
+			const items = Array.isArray(value)
+				? (value as string[]).join(", ")
+				: String(value ?? "");
+			return (
+				<div style={{ marginBottom: 8 }}>
+					{fieldLabel}
+					<input
+						type="text"
+						value={items}
+						placeholder="comma-separated values"
+						onChange={(e) =>
+							onChange(
+								e.target.value
+									.split(",")
+									.map((s) => s.trim())
+									.filter(Boolean),
+							)
+						}
+						style={paramInputStyle}
+					/>
+				</div>
+			);
+		}
+
+		case "object":
+		default: {
+			// Render as editable JSON textarea for nested objects or unknown types
+			const jsonText =
+				value != null
+					? typeof value === "string"
+						? value
+						: JSON.stringify(value, null, 2)
+					: "";
+			return (
+				<div style={{ marginBottom: 8 }}>
+					{fieldLabel}
+					<textarea
+						value={jsonText}
+						rows={3}
+						onChange={(e) => {
+							try {
+								onChange(JSON.parse(e.target.value));
+							} catch {
+								// allow intermediate invalid JSON while typing
+							}
+						}}
+						style={{
+							...paramInputStyle,
+							resize: "vertical",
+							fontFamily: "monospace",
+						}}
+					/>
+				</div>
+			);
+		}
+	}
+}
+
+// ─────────────────────────────────────────────────────────────
 // BlockSettingsPopover
 // ─────────────────────────────────────────────────────────────
 
@@ -234,6 +595,12 @@ export interface BlockSettingsPopoverProps {
 	allTransitions?: ParsedWorkflowTransition[];
 	/** Called when user checks a new connection in the popover */
 	onAddConnection?: (draft: Omit<NewConnectionDraft, "kind">) => void;
+	/** Block parameter schema from the analyzer — drives typed parameter editor */
+	blockParameterSchema?: BlockParameterSchema;
+	/** Called when parameters are changed via the typed editor */
+	onParametersChange?: (params: Record<string, unknown> | null) => void;
+	/** All activities in the workflow — needed for activity-id parameter fields */
+	allActivities?: ParsedWorkflowActivity[];
 }
 
 export function BlockSettingsPopover({
@@ -245,6 +612,9 @@ export function BlockSettingsPopover({
 	allSteps,
 	allTransitions,
 	onAddConnection,
+	blockParameterSchema,
+	onParametersChange,
+	allActivities,
 }: BlockSettingsPopoverProps) {
 	const ref = useRef<HTMLDivElement>(null);
 
@@ -435,27 +805,68 @@ export function BlockSettingsPopover({
 			</div>
 
 			{/* ── Parameters ──────────────────────────────────────── */}
-			{step.parameters && Object.keys(step.parameters).length > 0 && (
-				<div style={{ marginBottom: 8 }}>
-					<label style={smallLabelStyle}>Parameters (read-only)</label>
-					<pre
+			{(blockParameterSchema?.hasEditor ||
+				(step.parameters && Object.keys(step.parameters).length > 0)) && (
+				<>
+					<div
+						style={{ borderTop: "1px solid #f3f4f6", margin: "10px 0 8px" }}
+					/>
+					<div
 						style={{
-							fontSize: 10,
-							background: "#f9fafb",
-							border: "1px solid #e5e7eb",
-							padding: "6px 8px",
-							borderRadius: 4,
-							overflowX: "auto",
-							maxHeight: 120,
-							margin: "4px 0 0",
-							whiteSpace: "pre-wrap",
-							wordBreak: "break-all",
+							fontSize: 12,
+							fontWeight: 600,
 							color: "#374151",
+							marginBottom: 8,
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
 						}}
 					>
-						{JSON.stringify(step.parameters, null, 2)}
-					</pre>
-				</div>
+						Parameters
+						{!blockParameterSchema?.hasEditor && (
+							<span style={{ fontWeight: 400, color: "#9ca3af", fontSize: 10 }}>
+								(raw JSON — no schema available)
+							</span>
+						)}
+					</div>
+
+					{blockParameterSchema?.hasEditor &&
+					blockParameterSchema.fields.length > 0 ? (
+						<ParameterEditor
+							fields={blockParameterSchema.fields}
+							parameters={
+								(pendingFields.parameters !== undefined
+									? pendingFields.parameters
+									: step.parameters) ?? {}
+							}
+							allSteps={allSteps ?? []}
+							allActivities={allActivities ?? []}
+							onChange={onParametersChange ?? (() => {})}
+						/>
+					) : (
+						/* Fallback: raw JSON for blocks without a schema */
+						step.parameters &&
+						Object.keys(step.parameters).length > 0 && (
+							<pre
+								style={{
+									fontSize: 10,
+									background: "#f9fafb",
+									border: "1px solid #e5e7eb",
+									padding: "6px 8px",
+									borderRadius: 4,
+									overflowX: "auto",
+									maxHeight: 120,
+									margin: 0,
+									whiteSpace: "pre-wrap",
+									wordBreak: "break-all",
+									color: "#374151",
+								}}
+							>
+								{JSON.stringify(step.parameters, null, 2)}
+							</pre>
+						)
+					)}
+				</>
 			)}
 
 			{/* ── Connections ──────────────────────────────────────── */}

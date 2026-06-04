@@ -5,10 +5,12 @@ import type {
 	ParsedWorkflowDefinition,
 	ParsedWorkflowStep,
 	ParsedWorkflowTransition,
+	ParsedWorkflowActivity,
 	PendingChangeItem,
 	StepEditDraft,
 	EditableStepFields,
 	NewConnectionDraft,
+	BlockParameterSchemas,
 } from "../../../shared/types";
 import { BlockSettingsPopover } from "./BlockSettingsPopover";
 
@@ -141,6 +143,15 @@ export interface EditableWorkflowCanvasProps {
 	highlightedStepId?: string | null;
 	/** When true: no drag, no 'i' icon, default cursor. Use for view mode. */
 	readOnly?: boolean;
+	/** Block parameter schemas from the analyzer — drives typed parameter editor in popover */
+	blockParameterSchemas?: BlockParameterSchemas;
+	/** All activities in the workflow — for activity-id parameter fields */
+	allActivities?: ParsedWorkflowActivity[];
+	/** Called when parameters are changed via the typed editor in the popover */
+	onParametersChange?: (
+		step: ParsedWorkflowStep,
+		params: Record<string, unknown> | null,
+	) => void;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -676,6 +687,9 @@ export function EditableWorkflowCanvas({
 	zoomLevel,
 	highlightedStepId,
 	readOnly = false,
+	blockParameterSchemas,
+	allActivities,
+	onParametersChange,
 }: EditableWorkflowCanvasProps) {
 	const zoom = zoomLevel ?? 1;
 
@@ -885,6 +899,15 @@ export function EditableWorkflowCanvas({
 							allSteps={workflow.steps}
 							allTransitions={workflow.transitions}
 							onAddConnection={onAddConnectionDraft}
+							blockParameterSchema={
+								blockParameterSchemas?.[popStep.serviceWorkflowBlock.name]
+							}
+							allActivities={allActivities ?? []}
+							onParametersChange={
+								onParametersChange
+									? (params) => onParametersChange(popStep, params)
+									: undefined
+							}
 						/>
 					);
 				})()}

@@ -2,9 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type {
 	ParsedWorkflowDefinition,
 	ParsedWorkflowStep,
+	ParsedWorkflowActivity,
 	EditableStepFields,
 	PendingChangeItem,
 	NewConnectionDraft,
+	BlockParameterSchemas,
 } from "../../shared/types";
 import { EditableWorkflowCanvas } from "./edit/EditableWorkflowCanvas";
 import {
@@ -55,6 +57,13 @@ export interface CanvasPaneProps {
 	onAddTransition?: () => void;
 	/** Called when user creates a connection from the settings popover */
 	onAddConnectionDraft?: (draft: Omit<NewConnectionDraft, "kind">) => void;
+	/** Block parameter schemas fetched from the server (for typed param editing) */
+	blockParameterSchemas?: BlockParameterSchemas;
+	/** Called when parameters are changed via the typed editor in the popover */
+	onParametersChange?: (
+		step: ParsedWorkflowStep,
+		params: Record<string, unknown> | null,
+	) => void;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -91,6 +100,8 @@ export function CanvasPane({
 	onAddConnection,
 	onAddTransition,
 	onAddConnectionDraft,
+	blockParameterSchemas,
+	onParametersChange,
 }: CanvasPaneProps) {
 	const [view, setView] = useState<ViewState>({ zoom: 1.0, panX: 0, panY: 0 });
 	const [showLegend, setShowLegend] = useState(false);
@@ -345,6 +356,11 @@ export function CanvasPane({
 						onInfoFieldChange={mode === "edit" ? onInfoFieldChange : undefined}
 						onAddConnectionDraft={
 							mode === "edit" ? onAddConnectionDraft : undefined
+						}
+						blockParameterSchemas={blockParameterSchemas}
+						allActivities={workflow.activities as ParsedWorkflowActivity[]}
+						onParametersChange={
+							mode === "edit" ? onParametersChange : undefined
 						}
 					/>
 				</div>

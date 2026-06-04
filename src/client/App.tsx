@@ -17,6 +17,7 @@ import { useSeeds } from "./hooks/useSeeds";
 import { useWebSocket } from "./hooks/useWebSocket";
 import type { SeedParseResult } from "../shared/types";
 import { useEditMode } from "./hooks/useEditMode";
+import { useBlockParameters } from "./hooks/useBlockParameters";
 import { EditSidebar } from "./components/edit/EditSidebar";
 import { CanvasPane } from "./components/CanvasPane";
 import { CloneModal } from "./components/CloneModal";
@@ -93,6 +94,13 @@ export function App() {
 		addNewTransition,
 		removeNewItem,
 	} = useEditMode();
+
+	const {
+		schemas: blockParameterSchemas,
+		loading: schemaRefreshing,
+		lastRefreshed,
+		refresh: refreshSchemas,
+	} = useBlockParameters();
 
 	// Derive current workflow early so zoom / clone handlers can use it
 	const currentWorkflow = parseResult?.workflows[activeWorkflowIndex];
@@ -202,6 +210,59 @@ export function App() {
 					gap={2}
 					style={{ marginLeft: "auto" }}
 				>
+					{/* Refresh block parameter types from ClientSafe */}
+					<button
+						type="button"
+						onClick={refreshSchemas}
+						disabled={schemaRefreshing}
+						title={`Refresh block parameter types from ClientSafe${
+							lastRefreshed
+								? ` (last: ${lastRefreshed.toLocaleTimeString()})`
+								: ""
+						}`}
+						aria-label="Refresh block parameter schemas"
+						style={{
+							background: "none",
+							border: "none",
+							cursor: schemaRefreshing ? "wait" : "pointer",
+							padding: "4px 6px",
+							borderRadius: 4,
+							color: "#6b7280",
+							fontSize: 14,
+							lineHeight: 1,
+							opacity: schemaRefreshing ? 0.5 : 1,
+							display: "flex",
+							alignItems: "center",
+						}}
+					>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 14 14"
+							fill="none"
+							style={{
+								display: "block",
+								animation: schemaRefreshing
+									? "spin 1s linear infinite"
+									: "none",
+							}}
+						>
+							<path
+								d="M12 7A5 5 0 1 1 7 2"
+								stroke="currentColor"
+								strokeWidth="1.5"
+								strokeLinecap="round"
+								fill="none"
+							/>
+							<polyline
+								points="7,2 9.5,2 9.5,4.5"
+								stroke="currentColor"
+								strokeWidth="1.5"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							/>
+						</svg>
+					</button>
 					<Badge
 						text={connected ? "Live" : "Reconnecting…"}
 						color={connected ? "green" : "red"}
@@ -307,6 +368,10 @@ export function App() {
 									onAddConnection={() => setShowAddConnection(true)}
 									onAddTransition={() => setShowAddTransition(true)}
 									onAddConnectionDraft={(draft) => addNewConnection(draft)}
+									blockParameterSchemas={blockParameterSchemas}
+									onParametersChange={(step, params) => {
+										recordFieldChange(step, "parameters", params as any);
+									}}
 								/>
 
 								{/* Always-visible toggle — lives outside the sidebar so overflow:hidden never clips it */}
@@ -379,6 +444,7 @@ export function App() {
 										onEdit={() => enterEditMode()}
 										onClone={() => setShowCloneModal(true)}
 										isEditMode={isEditMode}
+										blockParameterSchemas={blockParameterSchemas}
 									/>
 								)}
 								{/* Bottom-left status bar — overlaid on canvas */}

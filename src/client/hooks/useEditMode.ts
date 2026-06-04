@@ -39,6 +39,10 @@ function getOriginalValue(
 			return step.serviceWorkflowBlock.name;
 		case "performerNeedsTask":
 			return step.performerNeedsTask;
+		case "parameters":
+			// Never auto-prune parameters — object comparison is complex and
+			// any change should always be preserved as a pending change.
+			return null;
 		default:
 			return undefined;
 	}

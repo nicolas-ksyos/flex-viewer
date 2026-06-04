@@ -1,0 +1,243 @@
+{
+  "accessForRequester": {
+    "blockName": "accessForRequester",
+    "fields": [],
+    "hasEditor": false
+  },
+  "assignAnyActivityPerformer": {
+    "blockName": "assignAnyActivityPerformer",
+    "fields": [
+      {
+        "key": "assignToOrganization",
+        "type": "boolean",
+        "required": false
+      },
+      {
+        "key": "assignWorkflowStepId",
+        "type": "step-id",
+        "required": true
+      },
+      {
+        "key": "serviceActivityIds",
+        "type": "activity-id-array",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "assignToPreviousActivityPerformer": {
+    "blockName": "assignToPreviousActivityPerformer",
+    "fields": [
+      {
+        "key": "activityIdWithPerformer",
+        "type": "activity-id",
+        "required": true
+      },
+      {
+        "key": "assignWorkflowStepId",
+        "type": "step-id",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "assignToRequester": {
+    "blockName": "assignToRequester",
+    "fields": [
+      {
+        "key": "assignWorkflowStepId",
+        "type": "step-id",
+        "required": true
+      },
+      {
+        "key": "type",
+        "type": "enum",
+        "enumValues": [],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "closeProcess": {
+    "blockName": "closeProcess",
+    "fields": [],
+    "hasEditor": false
+  },
+  "dummyAction": {
+    "blockName": "dummyAction",
+    "fields": [],
+    "hasEditor": false
+  },
+  "fixedIntervalScheduler": {
+    "blockName": "fixedIntervalScheduler",
+    "fields": [
+      {
+        "key": "intervalNumber",
+        "type": "number",
+        "required": true
+      },
+      {
+        "key": "intervalType",
+        "type": "enum",
+        "enumValues": [
+          "minutes",
+          "hours",
+          "days",
+          "weeks",
+          "months",
+          "years"
+        ],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "manualStart": {
+    "blockName": "manualStart",
+    "fields": [],
+    "hasEditor": false
+  },
+  "performActivity": {
+    "blockName": "performActivity",
+    "fields": [],
+    "hasEditor": false
+  },
+  "sendEmailToRequester": {
+    "blockName": "sendEmailToRequester",
+    "fields": [
+      {
+        "key": "emailType",
+        "type": "enum",
+        "enumValues": [
+          "processAssessmentCompleted",
+          "processConsultAnswered"
+        ],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendEmailToTaskPerformer": {
+    "blockName": "sendEmailToTaskPerformer",
+    "fields": [
+      {
+        "key": "emailType",
+        "type": "enum",
+        "enumValues": [
+          "processExaminationRequest",
+          "processGenericTask",
+          "processNeedsGrading"
+        ],
+        "required": true
+      },
+      {
+        "key": "recipientTaskWorkflowStepId",
+        "type": "step-id",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "sendZorgMail": {
+    "blockName": "sendZorgMail",
+    "fields": [
+      {
+        "key": "activityIdPerformedBySender",
+        "type": "activity-id",
+        "required": true
+      },
+      {
+        "key": "getTextParameters",
+        "type": "object",
+        "required": true
+      },
+      {
+        "key": "messageType",
+        "type": "enum",
+        "enumValues": [
+          "medspe",
+          "medvri"
+        ],
+        "required": true
+      },
+      {
+        "key": "recipient",
+        "type": "enum",
+        "enumValues": [
+          "generalPractitioner",
+          "starter"
+        ],
+        "required": true
+      },
+      {
+        "key": "recipientEntity",
+        "type": "enum",
+        "enumValues": [
+          "organization",
+          "employment"
+        ],
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "setRequesterFromCareProvider": {
+    "blockName": "setRequesterFromCareProvider",
+    "fields": [],
+    "hasEditor": false
+  },
+  "setRequesterFromStarter": {
+    "blockName": "setRequesterFromStarter",
+    "fields": [],
+    "hasEditor": false
+  },
+  "updatePatientFromActivityData": {
+    "blockName": "updatePatientFromActivityData",
+    "fields": [
+      {
+        "key": "activityId",
+        "type": "activity-id",
+        "required": true
+      },
+      {
+        "key": "updateFields",
+        "type": "string-array",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "upsertInPatientGeneralPractitionersTable": {
+    "blockName": "upsertInPatientGeneralPractitionersTable",
+    "fields": [
+      {
+        "key": "activityId",
+        "type": "activity-id",
+        "required": true
+      }
+    ],
+    "hasEditor": true
+  },
+  "userChoice": {
+    "blockName": "userChoice",
+    "fields": [],
+    "hasEditor": false
+  },
+  "waitForAll": {
+    "blockName": "waitForAll",
+    "fields": [],
+    "hasEditor": false
+  }
+}
