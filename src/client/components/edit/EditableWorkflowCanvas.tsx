@@ -490,27 +490,79 @@ function WorkflowBlock({
 
 	// Trash icon — shown on hover of non-deleted, non-new blocks in edit mode
 	const trashIcon =
-		!readOnly && !step.isNew && !isDeleted && isHovered && !isDragging && onDeleteClick ? (
+		!readOnly &&
+		!step.isNew &&
+		!isDeleted &&
+		isHovered &&
+		!isDragging &&
+		onDeleteClick ? (
 			<button
 				onMouseDown={(e) => e.stopPropagation()}
-				onClick={(e) => { e.stopPropagation(); onDeleteClick(); }}
+				onClick={(e) => {
+					e.stopPropagation();
+					onDeleteClick();
+				}}
 				style={{
-					position: "absolute", top: 4, right: 26,
-					width: 18, height: 18, borderRadius: "50%",
-					border: "1px solid #dc2626", background: "rgba(255,255,255,0.85)",
-					cursor: "pointer", display: "flex", alignItems: "center",
-					justifyContent: "center", padding: 0, color: "#dc2626",
-					opacity: 0.8, zIndex: 2,
+					position: "absolute",
+					top: 4,
+					right: 26,
+					width: 18,
+					height: 18,
+					borderRadius: "50%",
+					border: "1px solid #dc2626",
+					background: "rgba(255,255,255,0.85)",
+					cursor: "pointer",
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "center",
+					padding: 0,
+					color: "#dc2626",
+					opacity: 0.8,
+					zIndex: 2,
 				}}
 				title="Delete block"
 				aria-label="Delete block"
 			>
 				<svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-					<line x1="1" y1="3" x2="9" y2="3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-					<rect x="2" y="3" width="6" height="5.5" rx="0.5" stroke="currentColor" strokeWidth="1.1" />
-					<line x1="4" y1="3" x2="4" y2="8" stroke="currentColor" strokeWidth="0.9" />
-					<line x1="6" y1="3" x2="6" y2="8" stroke="currentColor" strokeWidth="0.9" />
-					<path d="M3.5 3V2C3.5 1.72 3.72 1.5 4 1.5H6C6.28 1.5 6.5 1.72 6.5 2V3" stroke="currentColor" strokeWidth="1" />
+					<line
+						x1="1"
+						y1="3"
+						x2="9"
+						y2="3"
+						stroke="currentColor"
+						strokeWidth="1.2"
+						strokeLinecap="round"
+					/>
+					<rect
+						x="2"
+						y="3"
+						width="6"
+						height="5.5"
+						rx="0.5"
+						stroke="currentColor"
+						strokeWidth="1.1"
+					/>
+					<line
+						x1="4"
+						y1="3"
+						x2="4"
+						y2="8"
+						stroke="currentColor"
+						strokeWidth="0.9"
+					/>
+					<line
+						x1="6"
+						y1="3"
+						x2="6"
+						y2="8"
+						stroke="currentColor"
+						strokeWidth="0.9"
+					/>
+					<path
+						d="M3.5 3V2C3.5 1.72 3.72 1.5 4 1.5H6C6.28 1.5 6.5 1.72 6.5 2V3"
+						stroke="currentColor"
+						strokeWidth="1"
+					/>
 				</svg>
 			</button>
 		) : null;
@@ -520,14 +572,29 @@ function WorkflowBlock({
 		!readOnly && isDeleted && isHovered && onUndoClick ? (
 			<button
 				onMouseDown={(e) => e.stopPropagation()}
-				onClick={(e) => { e.stopPropagation(); onUndoClick(); }}
+				onClick={(e) => {
+					e.stopPropagation();
+					onUndoClick();
+				}}
 				style={{
-					position: "absolute", top: 4, right: 26,
-					width: 18, height: 18, borderRadius: "50%",
-					border: "1px solid #9ca3af", background: "rgba(255,255,255,0.85)",
-					cursor: "pointer", fontSize: 12, fontWeight: 700,
-					display: "flex", alignItems: "center", justifyContent: "center",
-					padding: 0, zIndex: 2, color: "#6b7280", lineHeight: 1,
+					position: "absolute",
+					top: 4,
+					right: 26,
+					width: 18,
+					height: 18,
+					borderRadius: "50%",
+					border: "1px solid #9ca3af",
+					background: "rgba(255,255,255,0.85)",
+					cursor: "pointer",
+					fontSize: 12,
+					fontWeight: 700,
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "center",
+					padding: 0,
+					zIndex: 2,
+					color: "#6b7280",
+					lineHeight: 1,
 				}}
 				title="Undo deletion"
 				aria-label="Undo deletion"
@@ -654,7 +721,7 @@ function WorkflowBlock({
 			{trashIcon}
 			{undoIcon}
 		</div>
-);
+	);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1094,9 +1161,7 @@ export function EditableWorkflowCanvas({
 						setOpenPopoverStepId((prev) => (prev === step.id ? null : step.id));
 						onInfoIconClick?.(step);
 					}}
-					onDeleteClick={
-						onDeleteBlock ? () => onDeleteBlock(step) : undefined
-					}
+					onDeleteClick={onDeleteBlock ? () => onDeleteBlock(step) : undefined}
 					onUndoClick={
 						onUndoDeleteBlock ? () => onUndoDeleteBlock(step.id) : undefined
 					}

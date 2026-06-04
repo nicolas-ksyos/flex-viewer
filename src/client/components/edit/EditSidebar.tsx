@@ -479,50 +479,54 @@ export function EditSidebar({
 							</div>
 						)}
 
-										{/* ── Deletions section ───────────────────── */}
-							{hasDeletions && (
-								<div style={{ marginBottom: 12 }}>
-									<Text
-										size="xs"
-										color="subtle"
-										style={{
-											fontWeight: 600,
-											textTransform: "uppercase",
-											letterSpacing: "0.05em",
-											marginBottom: 6,
-											display: "block",
-										}}
-									>
-										Deletions
-									</Text>
-									{deletedStepItems.map((draft) => (
-										<NewItemEntry
-											key={draft.stepId}
-											badge={{ text: "DELETE", color: "#dc2626" }}
-											label={draft.stepName}
-											detail={
-												draft.impactedStepNames.length > 0
-													? `Impacts: ${draft.impactedStepNames.join(", ")}`
-													: "No dependencies impacted"
-											}
-											onRemove={() => onRemoveNewItem?.(draft.stepId)}
-										/>
-									))}
-									{removedConnItems.map((draft) => (
-										<NewItemEntry
-											key={draft.tempId}
-											badge={{ text: "REMOVE", color: "#f59e0b" }}
-											label={`${draft.fromStepName} → ${draft.toStepName}`}
-											detail={
-												draft.isDisable ? "disable" : draft.synchronous ? "sync" : "async"
-											}
-											onRemove={() => onRemoveNewItem?.(draft.tempId)}
-										/>
-									))}
-								</div>
-							)}
+						{/* ── Deletions section ───────────────────── */}
+						{hasDeletions && (
+							<div style={{ marginBottom: 12 }}>
+								<Text
+									size="xs"
+									color="subtle"
+									style={{
+										fontWeight: 600,
+										textTransform: "uppercase",
+										letterSpacing: "0.05em",
+										marginBottom: 6,
+										display: "block",
+									}}
+								>
+									Deletions
+								</Text>
+								{deletedStepItems.map((draft) => (
+									<NewItemEntry
+										key={draft.stepId}
+										badge={{ text: "DELETE", color: "#dc2626" }}
+										label={draft.stepName}
+										detail={
+											draft.impactedStepNames.length > 0
+												? `Impacts: ${draft.impactedStepNames.join(", ")}`
+												: "No dependencies impacted"
+										}
+										onRemove={() => onRemoveNewItem?.(draft.stepId)}
+									/>
+								))}
+								{removedConnItems.map((draft) => (
+									<NewItemEntry
+										key={draft.tempId}
+										badge={{ text: "REMOVE", color: "#f59e0b" }}
+										label={`${draft.fromStepName} → ${draft.toStepName}`}
+										detail={
+											draft.isDisable
+												? "disable"
+												: draft.synchronous
+													? "sync"
+													: "async"
+										}
+										onRemove={() => onRemoveNewItem?.(draft.tempId)}
+									/>
+								))}
+							</div>
+						)}
 
-			{/* ── Edits section ─────────────────────────── */}
+						{/* ── Edits section ─────────────────────────── */}
 						{hasEdits && (
 							<div>
 								{hasAdditions && (
