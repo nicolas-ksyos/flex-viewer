@@ -323,11 +323,10 @@ export function EditSidebar({
 				// Send ALL steps: use parsed variableName when available, otherwise
 				// derive one from the step name. This ensures every step ID in
 				// nextStepIds / synchronousNextStepIds can be resolved server-side.
-				stepVarNames: allSteps
-					.map((s) => ({
-						id: s.id,
-						variableName: s.variableName ?? generateVariableName(s.name),
-					})),
+				stepVarNames: allSteps.map((s) => ({
+					id: s.id,
+					variableName: s.variableName ?? generateVariableName(s.name),
+				})),
 			};
 			const res = await fetch(
 				`/api/seeds/${encodeURIComponent(selectedSeed)}`,

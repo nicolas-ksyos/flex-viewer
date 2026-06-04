@@ -4,6 +4,7 @@ import type {
 	ParsedWorkflowStep,
 	EditableStepFields,
 	PendingChangeItem,
+	NewConnectionDraft,
 } from "../../shared/types";
 import { EditableWorkflowCanvas } from "./edit/EditableWorkflowCanvas";
 import {
@@ -42,7 +43,7 @@ export interface CanvasPaneProps {
 	onInfoFieldChange?: (
 		step: ParsedWorkflowStep,
 		field: keyof EditableStepFields,
-		value: string | number | null,
+		value: string | number | boolean | null,
 	) => void;
 	// Toolbar action callbacks:
 	onEdit?: () => void;
@@ -52,6 +53,8 @@ export interface CanvasPaneProps {
 	onAddBlock?: () => void;
 	onAddConnection?: () => void;
 	onAddTransition?: () => void;
+	/** Called when user creates a connection from the settings popover */
+	onAddConnectionDraft?: (draft: Omit<NewConnectionDraft, "kind">) => void;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -87,6 +90,7 @@ export function CanvasPane({
 	onAddBlock,
 	onAddConnection,
 	onAddTransition,
+	onAddConnectionDraft,
 }: CanvasPaneProps) {
 	const [view, setView] = useState<ViewState>({ zoom: 1.0, panX: 0, panY: 0 });
 	const [showLegend, setShowLegend] = useState(false);
@@ -339,6 +343,7 @@ export function CanvasPane({
 							mode === "edit" && onBlockMove ? onBlockMove : noopBlockMove
 						}
 						onInfoFieldChange={mode === "edit" ? onInfoFieldChange : undefined}
+						onAddConnectionDraft={mode === "edit" ? onAddConnectionDraft : undefined}
 					/>
 				</div>
 			</div>

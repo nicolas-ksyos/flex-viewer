@@ -306,6 +306,7 @@ export function App() {
 									onAddBlock={() => setShowAddBlock(true)}
 									onAddConnection={() => setShowAddConnection(true)}
 									onAddTransition={() => setShowAddTransition(true)}
+									onAddConnectionDraft={(draft) => addNewConnection(draft)}
 								/>
 
 								{/* Always-visible toggle — lives outside the sidebar so overflow:hidden never clips it */}

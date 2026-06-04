@@ -8,6 +8,7 @@ import type {
 	PendingChangeItem,
 	StepEditDraft,
 	EditableStepFields,
+	NewConnectionDraft,
 } from "../../../shared/types";
 import { BlockSettingsPopover } from "./BlockSettingsPopover";
 
@@ -130,8 +131,10 @@ export interface EditableWorkflowCanvasProps {
 	onInfoFieldChange?: (
 		step: ParsedWorkflowStep,
 		field: keyof EditableStepFields,
-		value: string | number | null,
+		value: string | number | boolean | null,
 	) => void;
+	/** Called when a new connection is created from the settings popover */
+	onAddConnectionDraft?: (draft: Omit<NewConnectionDraft, "kind">) => void;
 	/** CSS transform scale applied to the canvas content (default: 1) */
 	zoomLevel?: number;
 	/** Step ID to highlight with a subtle blue glow (from sidebar hover) */
@@ -669,6 +672,7 @@ export function EditableWorkflowCanvas({
 	onBlockMove,
 	onInfoIconClick,
 	onInfoFieldChange,
+	onAddConnectionDraft,
 	zoomLevel,
 	highlightedStepId,
 	readOnly = false,
@@ -870,10 +874,17 @@ export function EditableWorkflowCanvas({
 							step={popStep}
 							pendingFields={pending?.fields ?? {}}
 							onFieldChange={(field, value) =>
-								onInfoFieldChange?.(popStep, field, value)
+								onInfoFieldChange?.(
+										popStep,
+										field,
+										value as string | number | null,
+								)
 							}
 							onClose={() => setOpenPopoverStepId(null)}
 							position={{ top: pixelY, left: pixelX + BLOCK_WIDTH + 8 }}
+							allSteps={workflow.steps}
+							allTransitions={workflow.transitions}
+							onAddConnection={onAddConnectionDraft}
 						/>
 					);
 				})()}

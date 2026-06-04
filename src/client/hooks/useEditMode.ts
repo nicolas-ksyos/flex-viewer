@@ -37,6 +37,8 @@ function getOriginalValue(
 			return step.type ?? "";
 		case "block":
 			return step.serviceWorkflowBlock.name;
+		case "performerNeedsTask":
+			return step.performerNeedsTask;
 		default:
 			return undefined;
 	}
@@ -191,7 +193,7 @@ export interface UseEditModeReturn {
 	recordFieldChange: (
 		step: ParsedWorkflowStep,
 		field: keyof EditableStepFields,
-		value: string | number | null | undefined,
+		value: string | number | boolean | null | undefined,
 	) => void;
 	/** Remove all pending edits for a specific existing step. */
 	removeStepChange: (stepId: string) => void;
@@ -277,7 +279,7 @@ export function useEditMode(): UseEditModeReturn {
 		(
 			step: ParsedWorkflowStep,
 			field: keyof EditableStepFields,
-			value: string | number | null | undefined,
+			value: string | number | boolean | null | undefined,
 		) => mergeChange(step, { [field]: value } as EditableStepFields),
 		[mergeChange],
 	);

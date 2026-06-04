@@ -121,6 +121,7 @@ export interface EditableStepFields {
 	allowedPerformer?: string | null;
 	type?: string;
 	block?: string;
+	performerNeedsTask?: boolean;
 }
 
 /**

@@ -1,9 +1,34 @@
 import { useEffect, useRef } from "react";
 import type {
 	ParsedWorkflowStep,
+	ParsedWorkflowTransition,
 	EditableStepFields,
+	NewConnectionDraft,
 } from "../../../shared/types";
 import { BLOCK_NAMES } from "../../../shared/blockTypes";
+
+// ─────────────────────────────────────────────────────────────
+// Shared styles
+// ─────────────────────────────────────────────────────────────
+
+const smallLabelStyle: React.CSSProperties = {
+	display: "block",
+	fontSize: 11,
+	color: "#6b7280",
+	marginBottom: 2,
+	fontWeight: 500,
+};
+
+const inputStyle: React.CSSProperties = {
+	width: "100%",
+	padding: "4px 6px",
+	fontSize: 12,
+	border: "1px solid #d1d5db",
+	borderRadius: 4,
+	boxSizing: "border-box",
+	outline: "none",
+	fontFamily: "inherit",
+};
 
 // ─────────────────────────────────────────────────────────────
 // Sub-components
@@ -24,33 +49,14 @@ function FieldRow({
 }) {
 	return (
 		<div style={{ marginBottom: 8 }}>
-			<label
-				style={{
-					display: "block",
-					fontSize: 11,
-					color: "#6b7280",
-					marginBottom: 2,
-					fontWeight: 500,
-				}}
-			>
-				{label}
-			</label>
+			<label style={smallLabelStyle}>{label}</label>
 			{editable ? (
 				<input
 					type="text"
 					value={value}
 					placeholder={placeholder ?? ""}
 					onChange={(e) => onChange?.(e.target.value)}
-					style={{
-						width: "100%",
-						padding: "4px 6px",
-						fontSize: 12,
-						border: "1px solid #d1d5db",
-						borderRadius: 4,
-						boxSizing: "border-box",
-						outline: "none",
-						fontFamily: "inherit",
-					}}
+					style={inputStyle}
 				/>
 			) : (
 				<span
@@ -69,6 +75,58 @@ function FieldRow({
 	);
 }
 
+function NumberField({
+	label,
+	value,
+	onChange,
+}: {
+	label: string;
+	value: number;
+	onChange: (v: number) => void;
+}) {
+	return (
+		<div style={{ marginBottom: 8 }}>
+			<label style={smallLabelStyle}>{label}</label>
+			<input
+				type="number"
+				value={value}
+				min={0}
+				onChange={(e) => {
+					const n = parseInt(e.target.value, 10);
+					if (!isNaN(n)) onChange(n);
+				}}
+				style={inputStyle}
+			/>
+		</div>
+	);
+}
+
+function CheckboxField({
+	label,
+	checked,
+	onChange,
+}: {
+	label: string;
+	checked: boolean;
+	onChange: (v: boolean) => void;
+}) {
+	return (
+		<div
+			style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}
+		>
+			<input
+				type="checkbox"
+				checked={checked}
+				onChange={(e) => onChange(e.target.checked)}
+				style={{ cursor: "pointer", width: 14, height: 14, flexShrink: 0 }}
+			/>
+			<label style={{ fontSize: 12, color: "#374151", cursor: "pointer" }}>
+				{label}
+			</label>
+		</div>
+	);
+}
+
 function BlockEnumField({
 	label,
 	value,
@@ -78,37 +136,16 @@ function BlockEnumField({
 	value: string;
 	onChange: (v: string) => void;
 }) {
-	// If the current value isn't in BLOCK_NAMES (shouldn't happen, but be safe)
 	const options = BLOCK_NAMES.includes(value)
 		? BLOCK_NAMES
 		: [value, ...BLOCK_NAMES];
-
 	return (
 		<div style={{ marginBottom: 8 }}>
-			<label
-				style={{
-					display: "block",
-					fontSize: 11,
-					color: "#6b7280",
-					marginBottom: 2,
-					fontWeight: 500,
-				}}
-			>
-				{label}
-			</label>
+			<label style={smallLabelStyle}>{label}</label>
 			<select
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
-				style={{
-					width: "100%",
-					padding: "4px 6px",
-					fontSize: 12,
-					border: "1px solid #d1d5db",
-					borderRadius: 4,
-					background: "white",
-					cursor: "pointer",
-					fontFamily: "inherit",
-				}}
+				style={{ ...inputStyle, background: "white", cursor: "pointer" }}
 			>
 				{options.map((name) => (
 					<option key={name} value={name}>
@@ -116,6 +153,64 @@ function BlockEnumField({
 					</option>
 				))}
 			</select>
+		</div>
+	);
+}
+
+/** Compact scrollable checkbox list for picking steps */
+function StepCheckList({
+	steps,
+	currentStepId,
+	connectedStepIds,
+	onChange,
+}: {
+	steps: ParsedWorkflowStep[];
+	currentStepId: string;
+	connectedStepIds: Set<string>;
+	onChange: (stepId: string, checked: boolean) => void;
+}) {
+	const candidates = steps.filter((s) => s.id !== currentStepId);
+	if (candidates.length === 0) {
+		return (
+			<span style={{ fontSize: 11, color: "#9ca3af" }}>No other steps</span>
+		);
+	}
+	return (
+		<div
+			style={{
+				maxHeight: 110,
+				overflowY: "auto",
+				border: "1px solid #e5e7eb",
+				borderRadius: 4,
+				padding: "4px 6px",
+			}}
+		>
+			{candidates.map((s) => {
+				const already = connectedStepIds.has(s.id);
+				return (
+					<label
+						key={s.id}
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: 11,
+							cursor: already ? "default" : "pointer",
+							padding: "2px 0",
+							color: already ? "#9ca3af" : "#374151",
+						}}
+					>
+						<input
+							type="checkbox"
+							checked={already}
+							disabled={already}
+							onChange={(e) => onChange(s.id, e.target.checked)}
+							style={{ flexShrink: 0 }}
+						/>
+						{s.name}
+					</label>
+				);
+			})}
 		</div>
 	);
 }
@@ -129,10 +224,16 @@ export interface BlockSettingsPopoverProps {
 	pendingFields: EditableStepFields;
 	onFieldChange: (
 		field: keyof EditableStepFields,
-		value: string | number | null,
+		value: string | number | boolean | null,
 	) => void;
 	onClose: () => void;
 	position: { top: number; left: number };
+	/** All steps in the workflow — needed to show connection picker */
+	allSteps?: ParsedWorkflowStep[];
+	/** All transitions — needed to show existing connections */
+	allTransitions?: ParsedWorkflowTransition[];
+	/** Called when user checks a new connection in the popover */
+	onAddConnection?: (draft: Omit<NewConnectionDraft, "kind">) => void;
 }
 
 export function BlockSettingsPopover({
@@ -141,6 +242,9 @@ export function BlockSettingsPopover({
 	onFieldChange,
 	onClose,
 	position,
+	allSteps,
+	allTransitions,
+	onAddConnection,
 }: BlockSettingsPopoverProps) {
 	const ref = useRef<HTMLDivElement>(null);
 
@@ -160,7 +264,6 @@ export function BlockSettingsPopover({
 				onClose();
 			}
 		};
-		// Use capture so we catch the event before React's synthetic event system
 		document.addEventListener("mousedown", handler, true);
 		return () => document.removeEventListener("mousedown", handler, true);
 	}, [onClose]);
@@ -175,6 +278,29 @@ export function BlockSettingsPopover({
 			: (step.allowedPerformer ?? "");
 	const currentType =
 		pendingFields.type !== undefined ? pendingFields.type : (step.type ?? "");
+	const currentX =
+		pendingFields.x !== undefined ? pendingFields.x : step.displayOptions.x;
+	const currentY =
+		pendingFields.y !== undefined ? pendingFields.y : step.displayOptions.y;
+	const currentPerformerNeedsTask =
+		pendingFields.performerNeedsTask !== undefined
+			? pendingFields.performerNeedsTask
+			: step.performerNeedsTask;
+
+	// Pre-compute connected step ID sets for the connection pickers
+	const outgoing = (allTransitions ?? []).filter(
+		(t) => t.fromStepId === step.id,
+	);
+	const asyncConnectedIds = new Set(
+		outgoing
+			.filter((t) => !t.synchronous && t.type !== "disable")
+			.map((t) => t.toStepId),
+	);
+	const syncConnectedIds = new Set(
+		outgoing
+			.filter((t) => t.synchronous && t.type !== "disable")
+			.map((t) => t.toStepId),
+	);
 
 	return (
 		<div
@@ -188,12 +314,11 @@ export function BlockSettingsPopover({
 				border: "1px solid #e5e7eb",
 				borderRadius: 8,
 				boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-				width: 280,
-				maxHeight: 480,
+				width: 340,
+				maxHeight: 580,
 				overflowY: "auto",
 				padding: 16,
 			}}
-			// Prevent click inside from triggering canvas mousedown (drag, etc.)
 			onMouseDown={(e) => e.stopPropagation()}
 		>
 			{/* Header */}
@@ -227,93 +352,92 @@ export function BlockSettingsPopover({
 				</button>
 			</div>
 
-			{/* Editable string fields */}
+			{/* ── Block type ─────────────────────────────────────── */}
+			<BlockEnumField
+				label="Block type"
+				value={currentBlock}
+				onChange={(v) => onFieldChange("block", v)}
+			/>
+
+			{/* ── Name & Label ────────────────────────────────────── */}
 			<FieldRow
-				label="name"
+				label="Name"
 				value={currentName}
 				onChange={(v) => onFieldChange("name", v)}
 				editable
 			/>
 			<FieldRow
-				label="label"
+				label="Label"
 				value={currentLabel}
 				onChange={(v) => onFieldChange("label", v)}
 				editable
 			/>
+
+			{/* ── Allowed performer & type ─────────────────────────── */}
 			<FieldRow
-				label="allowedPerformer"
+				label="Allowed performer"
 				value={currentAllowedPerformer}
 				placeholder="(none)"
 				onChange={(v) => onFieldChange("allowedPerformer", v || null)}
 				editable
 			/>
 			<FieldRow
-				label="type"
+				label="Type"
 				value={currentType}
 				placeholder="(none)"
 				onChange={(v) => onFieldChange("type", v)}
 				editable
 			/>
 
-			{/* Editable block enum */}
-			<BlockEnumField
-				label="block"
-				value={currentBlock}
-				onChange={(v) => onFieldChange("block", v)}
-			/>
+			{/* ── Position (editable number inputs) ───────────────── */}
+			<div style={{ display: "flex", gap: 8 }}>
+				<div style={{ flex: 1 }}>
+					<NumberField
+						label="X position"
+						value={currentX}
+						onChange={(v) => onFieldChange("x", v)}
+					/>
+				</div>
+				<div style={{ flex: 1 }}>
+					<NumberField
+						label="Y position"
+						value={currentY}
+						onChange={(v) => onFieldChange("y", v)}
+					/>
+				</div>
+			</div>
 
-			{/* Divider */}
+			{/* ── Booleans ─────────────────────────────────────────── */}
+			<CheckboxField
+				label="Performer needs task"
+				checked={currentPerformerNeedsTask}
+				onChange={(v) => onFieldChange("performerNeedsTask", v)}
+			/>
+			{/* isRerunnable — read-only (not in seed file; set by the framework) */}
 			<div
 				style={{
-					borderTop: "1px solid #f3f4f6",
-					margin: "10px 0",
+					display: "flex",
+					alignItems: "center",
+					gap: 8,
+					marginBottom: 8,
+					opacity: 0.6,
 				}}
-			/>
+			>
+				<input
+					type="checkbox"
+					checked={step.isRerunnable}
+					disabled
+					style={{ width: 14, height: 14, flexShrink: 0 }}
+				/>
+				<label style={{ fontSize: 12, color: "#374151" }}>
+					Is rerunnable (read-only)
+				</label>
+			</div>
 
-			{/* Read-only fields */}
-			<FieldRow
-				label="x (set via drag)"
-				value={String(
-					pendingFields.x !== undefined
-						? pendingFields.x
-						: step.displayOptions.x,
-				)}
-				editable={false}
-			/>
-			<FieldRow
-				label="y (set via drag)"
-				value={String(
-					pendingFields.y !== undefined
-						? pendingFields.y
-						: step.displayOptions.y,
-				)}
-				editable={false}
-			/>
-			<FieldRow
-				label="performerNeedsTask"
-				value={String(step.performerNeedsTask)}
-				editable={false}
-			/>
-			<FieldRow
-				label="isRerunnable"
-				value={String(step.isRerunnable)}
-				editable={false}
-			/>
-
-			{/* Parameters read-only JSON */}
+			{/* ── Parameters ──────────────────────────────────────── */}
 			{step.parameters && Object.keys(step.parameters).length > 0 && (
-				<div style={{ marginTop: 4 }}>
-					<label
-						style={{
-							display: "block",
-							fontSize: 11,
-							color: "#6b7280",
-							marginBottom: 2,
-							fontWeight: 500,
-						}}
-					>
-						parameters (read-only)
-					</label>
+				<div style={{ marginBottom: 8 }}>
+					<label style={smallLabelStyle}>Parameters (read-only)</label>
 					<pre
 						style={{
 							fontSize: 10,
@@ -332,6 +456,139 @@ export function BlockSettingsPopover({
 						{JSON.stringify(step.parameters, null, 2)}
 					</pre>
 				</div>
+			)}
+
+			{/* ── Connections ──────────────────────────────────────── */}
+			{allSteps && allSteps.length > 1 && (
+				<>
+					<div style={{ borderTop: "1px solid #f3f4f6", margin: "12px 0 10px" }} />
+					<div
+						style={{
+							fontSize: 12,
+							fontWeight: 600,
+							color: "#374151",
+							marginBottom: 10,
+						}}
+					>
+						Connections
+					</div>
+
+					{/* Existing outgoing connections */}
+					{outgoing.length > 0 && (
+						<div style={{ marginBottom: 10 }}>
+							<label style={smallLabelStyle}>Current outgoing:</label>
+							{outgoing.map((t) => {
+								const target = (allSteps ?? []).find(
+									(s) => s.id === t.toStepId,
+								);
+								const color =
+									t.type === "disable"
+										? "#EE1111"
+										: t.synchronous
+											? "#FF37F0"
+											: "#FF9A1E";
+								const tag =
+									t.type === "disable"
+										? "disable"
+										: t.synchronous
+											? "sync"
+											: "async";
+								return (
+									<div
+										key={t.id}
+										style={{ fontSize: 11, color, marginBottom: 3 }}
+									>
+										→ {target?.name ?? t.toStepId}{" "}
+										<span
+											style={{
+												background: color + "22",
+												border: `1px solid ${color}`,
+												borderRadius: 3,
+												padding: "0 4px",
+												fontSize: 10,
+											}}
+										>
+											{tag}
+										</span>
+									</div>
+								);
+							})}
+						</div>
+					)}
+
+					{/* Add new async connections */}
+					{onAddConnection && (
+						<>
+							<div style={{ marginBottom: 8 }}>
+								<label style={{ ...smallLabelStyle, marginBottom: 4 }}>
+									Add next steps{" "}
+									<span
+										style={{
+											background: "#FF9A1E22",
+											border: "1px solid #FF9A1E",
+											borderRadius: 3,
+											padding: "0 4px",
+											fontSize: 10,
+											color: "#FF9A1E",
+										}}
+									>
+										async
+									</span>
+									:
+								</label>
+								<StepCheckList
+									steps={allSteps}
+									currentStepId={step.id}
+									connectedStepIds={asyncConnectedIds}
+									onChange={(stepId, checked) => {
+										if (checked) {
+											onAddConnection({
+												tempId: `conn-async-${Date.now()}`,
+												fromStepId: step.id,
+												toStepIds: [stepId],
+												synchronous: false,
+											});
+										}
+									}}
+								/>
+							</div>
+
+							<div style={{ marginBottom: 8 }}>
+								<label style={{ ...smallLabelStyle, marginBottom: 4 }}>
+									Add synchronous next steps{" "}
+									<span
+										style={{
+											background: "#FF37F022",
+											border: "1px solid #FF37F0",
+											borderRadius: 3,
+											padding: "0 4px",
+											fontSize: 10,
+											color: "#FF37F0",
+										}}
+									>
+										sync
+									</span>
+									:
+								</label>
+								<StepCheckList
+									steps={allSteps}
+									currentStepId={step.id}
+									connectedStepIds={syncConnectedIds}
+									onChange={(stepId, checked) => {
+										if (checked) {
+											onAddConnection({
+												tempId: `conn-sync-${Date.now()}`,
+												fromStepId: step.id,
+												toStepIds: [stepId],
+												synchronous: true,
+											});
+										}
+									}}
+								/>
+							</div>
+						</>
+					)}
+				</>
 			)}
 		</div>
 	);
