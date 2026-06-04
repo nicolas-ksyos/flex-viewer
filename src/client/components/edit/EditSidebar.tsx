@@ -10,6 +10,7 @@ import type {
 	SeedPatchResponse,
 	ParsedWorkflowStep,
 } from "../../../shared/types";
+import { generateVariableName } from "../../hooks/useEditMode";
 
 // ─────────────────────────────────────────────────────────────
 // Toggle button icon (panel collapse / expand)
@@ -319,10 +320,14 @@ export function EditSidebar({
 				...(newSteps.length > 0 ? { newSteps } : {}),
 				...(newConnections.length > 0 ? { newConnections } : {}),
 				...(newTransitions.length > 0 ? { newTransitions } : {}),
-				// Provide variable-name map so the server can resolve IDs → variable names
+				// Send ALL steps: use parsed variableName when available, otherwise
+				// derive one from the step name. This ensures every step ID in
+				// nextStepIds / synchronousNextStepIds can be resolved server-side.
 				stepVarNames: allSteps
-					.filter((s) => s.variableName)
-					.map((s) => ({ id: s.id, variableName: s.variableName! })),
+					.map((s) => ({
+						id: s.id,
+						variableName: s.variableName ?? generateVariableName(s.name),
+					})),
 			};
 			const res = await fetch(
 				`/api/seeds/${encodeURIComponent(selectedSeed)}`,

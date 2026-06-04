@@ -228,21 +228,11 @@ function generateStepCode(
 		lines.push(`${PI}performerNeedsTask: true,`);
 	}
 
-	// nextStepIds — resolve each ID to its variable name
-	if (f.nextStepIds && f.nextStepIds.length > 0) {
-		const varNames = f.nextStepIds
-			.map((id) => stepVarNames.get(id) ?? `/* unknown(${id}) */`)
-			.join(", ");
-		lines.push(`${PI}nextSteps: [${varNames}],`);
-	}
-
-	// synchronousNextStepIds
-	if (f.synchronousNextStepIds && f.synchronousNextStepIds.length > 0) {
-		const varNames = f.synchronousNextStepIds
-			.map((id) => stepVarNames.get(id) ?? `/* unknown(${id}) */`)
-			.join(", ");
-		lines.push(`${PI}synchronousNextSteps: [${varNames}],`);
-	}
+	// nextStepIds / synchronousNextStepIds are intentionally NOT inlined here.
+	// App.tsx creates explicit NewConnectionDraft entries for them, which are
+	// written via appendToNextStepsArray after the step is inserted. Inlining
+	// here would cause duplicate entries and requires stepVarNames lookups that
+	// may not yet be available at code-generation time.
 
 	lines.push(`${PI}x: ${f.x},`);
 	lines.push(`${PI}y: ${f.y},`);
