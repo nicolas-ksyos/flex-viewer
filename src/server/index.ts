@@ -36,8 +36,12 @@ app.post("/api/watch", (req, res) => {
 		"seeds",
 		seedFileName,
 	);
-	startWatching(config.clientSafePath, seedFilePath, broadcast);
-	res.json({ watching: seedFilePath });
+	const initialResult = startWatching(
+		config.clientSafePath,
+		seedFilePath,
+		broadcast,
+	);
+	res.json({ watching: seedFilePath, initialResult: initialResult ?? null });
 });
 
 app.post("/api/watch/stop", (_req, res) => {

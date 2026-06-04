@@ -26,6 +26,23 @@ import { AddConnectionModal } from "./components/edit/AddConnectionModal";
 import { AddTransitionModal } from "./components/edit/AddTransitionModal";
 import type { NewStepDraft } from "../shared/types";
 
+// ─── Progress bar component ────────────────────────────────────
+function ParseProgressBar({ slim = false }: { slim?: boolean }) {
+	return (
+		<div
+			style={{
+				height: slim ? 3 : 6,
+				width: slim ? "100%" : 280,
+				borderRadius: 3,
+				background:
+					"linear-gradient(90deg, #3b82f6 0%, #93c5fd 50%, #3b82f6 100%)",
+				backgroundSize: "200% 100%",
+				animation: "progress-shimmer 1.5s ease-in-out infinite",
+			}}
+		/>
+	);
+}
+
 function EmptyStateBox({
 	title,
 	subtitle,
@@ -66,7 +83,7 @@ export function App() {
 		fetchSeeds,
 		startWatching,
 	} = useSeeds(config?.clientSafePath);
-	const { connected, lastResult, lastError } = useWebSocket();
+	const { connected, lastResult, lastError, isParsing } = useWebSocket();
 
 	const [selectedSeed, setSelectedSeed] = useState<string | null>(null);
 	const [parseResult, setParseResult] = useState<SeedParseResult | null>(null);
@@ -127,7 +144,15 @@ export function App() {
 	}, [lastResult]);
 
 	useEffect(() => {
-		if (selectedSeed && config?.clientSafePath) startWatching(selectedSeed);
+		if (!selectedSeed || !config?.clientSafePath) return;
+		startWatching(selectedSeed).then((result) => {
+			if (result) {
+				// Use setParseResult only if not already set (avoids overwriting a
+				// result that handleSelectSeed already delivered via the same call).
+				setParseResult((prev) => prev ?? result);
+				setActiveWorkflowIndex(0);
+			}
+		});
 	}, [selectedSeed, config?.clientSafePath, startWatching]);
 
 	// ── Seed selection ────────────────────────────────────────────
@@ -139,7 +164,11 @@ export function App() {
 			setParseResult(null);
 			setActiveWorkflowIndex(0);
 			await updateConfig({ lastSelectedSeed: fileName });
-			await startWatching(fileName);
+			const result = await startWatching(fileName);
+			if (result) {
+				setParseResult(result);
+				setActiveWorkflowIndex(0);
+			}
 		},
 		[updateConfig, startWatching, handleExitEditMode],
 	);
@@ -321,13 +350,21 @@ export function App() {
 						alignItems="center"
 						justifyContent="center"
 						p={16}
-						gap={3}
+						gap={4}
 					>
-						<Spinner />
-						<Text color="subtle">Waiting for the seed file to be parsed…</Text>
+						<Text color="subtle" style={{ marginBottom: 4 }}>
+							Parsing seed file…
+						</Text>
+						<ParseProgressBar />
 					</Box>
 				) : (
 					<>
+						{/* Slim re-parse progress bar — shown over existing workflow during file-change re-parses */}
+						{isParsing && (
+							<div style={{ position: "relative", flexShrink: 0, zIndex: 100 }}>
+								<ParseProgressBar slim />
+							</div>
+						)}
 						{parseResult.workflows.length > 1 && (
 							<WorkflowTabs
 								workflows={parseResult.workflows}

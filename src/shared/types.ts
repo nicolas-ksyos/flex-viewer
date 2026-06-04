@@ -110,7 +110,16 @@ export interface WsWatchStarted {
 	filePath: string;
 }
 
-export type WsMessage = WsWorkflowUpdate | WsFileError | WsWatchStarted;
+export interface WsParsingStarted {
+	type: "parsingStarted";
+	filePath: string;
+}
+
+export type WsMessage =
+	| WsWorkflowUpdate
+	| WsFileError
+	| WsWatchStarted
+	| WsParsingStarted;
 
 // ─────────────────────────────────────────────────────────────
 // Block parameter schema types (populated by the server analyzer)
