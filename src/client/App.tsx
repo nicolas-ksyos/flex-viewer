@@ -18,7 +18,7 @@ import { useWebSocket } from "./hooks/useWebSocket";
 import type { SeedParseResult } from "../shared/types";
 import { useEditMode } from "./hooks/useEditMode";
 import { useBlockParameters } from "./hooks/useBlockParameters";
-import { EditSidebar } from "./components/edit/EditSidebar";
+import { ContextSidebar } from "./components/ContextSidebar";
 import { CanvasPane } from "./components/CanvasPane";
 import { CloneModal } from "./components/CloneModal";
 import { AddBlockModal } from "./components/edit/AddBlockModal";
@@ -94,6 +94,7 @@ export function App() {
 	const [showAddBlock, setShowAddBlock] = useState(false);
 	const [showAddConnection, setShowAddConnection] = useState(false);
 	const [showAddTransition, setShowAddTransition] = useState(false);
+	const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 	const [highlightedStepId, setHighlightedStepId] = useState<string | null>(
 		null,
 	);
@@ -131,6 +132,7 @@ export function App() {
 		exitEditMode();
 		setSidebarVisible(true);
 		setHighlightedStepId(null);
+		setSelectedStepId(null);
 		// Do NOT reset parseResult here — the file watcher will re-parse and
 		// broadcast a workflowUpdate via WebSocket which updates parseResult
 		// naturally. Resetting to null here risks a race: if the WS update
@@ -172,6 +174,7 @@ export function App() {
 			setSelectedSeed(fileName);
 			setParseResult(null);
 			setActiveWorkflowIndex(0);
+			setSelectedStepId(null);
 			await updateConfig({ lastSelectedSeed: fileName });
 			const result = await startWatching(fileName);
 			if (result) {
@@ -382,20 +385,22 @@ export function App() {
 							/>
 						)}
 
-						{/* ── Edit mode ─────────────────────────────────── */}
-						{isEditMode && currentWorkflow ? (
+						{/* ── Unified canvas + sidebar layout ───────────── */}
+						{currentWorkflow ? (
 							<Box
 								display="flex"
 								flex={1}
 								overflow="hidden"
 								style={{ position: "relative" }}
 							>
-								{/* Canvas + toolbar (CanvasPane owns zoom state & auto-fit) */}
+								{/* Canvas pane */}
 								<CanvasPane
 									workflow={currentWorkflow.workflow}
-									mode="edit"
+									mode={isEditMode ? "edit" : "view"}
 									pendingChanges={pendingChanges}
 									highlightedStepId={highlightedStepId}
+									selectedStepId={selectedStepId}
+									onBlockClick={(step) => setSelectedStepId(step?.id ?? null)}
 									onBlockMove={(stepId, newGridX, newGridY) => {
 										const step = currentWorkflow.workflow.steps.find(
 											(s) => s.id === stepId,
@@ -405,11 +410,6 @@ export function App() {
 									onInfoFieldChange={(step, field, value) =>
 										recordFieldChange(step, field, value)
 									}
-									onEdit={() => {
-										/* already in edit mode, no-op */
-									}}
-									onClone={() => setShowCloneModal(true)}
-									isEditMode={isEditMode}
 									onAddBlock={() => setShowAddBlock(true)}
 									onAddConnection={() => setShowAddConnection(true)}
 									onAddTransition={() => setShowAddTransition(true)}
@@ -427,80 +427,7 @@ export function App() {
 									onUndoRemoveConnection={undoConnectionRemoval}
 								/>
 
-								{/* Always-visible toggle — lives outside the sidebar so overflow:hidden never clips it */}
-								<button
-									type="button"
-									onClick={() => setSidebarVisible((v) => !v)}
-									title={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
-									aria-label={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
-									style={{
-										position: "absolute",
-										top: 12,
-										right: sidebarVisible ? 308 : 8,
-										zIndex: 50,
-										background: "white",
-										border: "1px solid var(--kds-color-gray-200)",
-										borderRadius: 6,
-										cursor: "pointer",
-										padding: "4px 7px",
-										boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
-										fontSize: 13,
-										lineHeight: 1,
-										transition: "right 0.2s ease",
-									}}
-								>
-									{sidebarVisible ? "▶" : "◀"}
-								</button>
-
-								{/* Collapsible sidebar — collapses to zero width; toggle above handles open/close */}
-								<div
-									style={{
-										width: sidebarVisible ? 300 : 0,
-										flexShrink: 0,
-										transition: "width 0.2s ease",
-										borderLeft: sidebarVisible
-											? "1px solid var(--kds-color-gray-200)"
-											: "none",
-										display: "flex",
-										flexDirection: "column",
-										height: "100%",
-										overflow: "hidden",
-									}}
-								>
-									{sidebarVisible && (
-										<EditSidebar
-											pendingChanges={pendingChanges}
-											selectedSeed={selectedSeed!}
-											onSaveSuccess={handleExitEditMode}
-											onDiscard={handleExitEditMode}
-											onRemoveStepChange={removeStepChange}
-											onStepHover={setHighlightedStepId}
-											onRemoveNewItem={removeNewItem}
-											allSteps={currentWorkflow.workflow.steps}
-										/>
-									)}
-								</div>
-							</Box>
-						) : (
-							/* ── View mode ─────────────────────────────────── */
-							<Box
-								flex={1}
-								position="relative"
-								display="flex"
-								flexDirection="column"
-								style={{ overflow: "hidden" }}
-							>
-								{currentWorkflow && (
-									<CanvasPane
-										workflow={currentWorkflow.workflow}
-										mode="view"
-										onEdit={() => enterEditMode()}
-										onClone={() => setShowCloneModal(true)}
-										isEditMode={isEditMode}
-										blockParameterSchemas={blockParameterSchemas}
-									/>
-								)}
-								{/* Bottom-left status bar — overlaid on canvas */}
+								{/* Diagnostics bar — bottom-left overlay */}
 								<div
 									style={{
 										position: "absolute",
@@ -525,8 +452,83 @@ export function App() {
 										</Text>
 									)}
 								</div>
+
+								{/* Sidebar toggle button */}
+								<button
+									type="button"
+									onClick={() => setSidebarVisible((v) => !v)}
+									title={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
+									aria-label={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
+									style={{
+										position: "absolute",
+										top: 12,
+										right: sidebarVisible ? 308 : 8,
+										zIndex: 50,
+										background: "white",
+										border: "1px solid var(--kds-color-gray-200)",
+										borderRadius: 6,
+										cursor: "pointer",
+										padding: "4px 7px",
+										boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
+										fontSize: 13,
+										lineHeight: 1,
+										transition: "right 0.2s ease",
+									}}
+								>
+									{sidebarVisible ? "▶" : "◄"}
+								</button>
+
+								{/* Collapsible sidebar */}
+								<div
+									style={{
+										width: sidebarVisible ? 300 : 0,
+										flexShrink: 0,
+										transition: "width 0.2s ease",
+										borderLeft: sidebarVisible
+											? "1px solid var(--kds-color-gray-200)"
+											: "none",
+										display: "flex",
+										flexDirection: "column",
+										height: "100%",
+										overflow: "hidden",
+									}}
+								>
+									{sidebarVisible && (
+										<ContextSidebar
+											isEditMode={isEditMode}
+											selectedSeed={selectedSeed!}
+											workflow={currentWorkflow.workflow}
+											serviceName={currentWorkflow.serviceName}
+											serviceCode={currentWorkflow.serviceCode}
+											blockParameterSchemas={blockParameterSchemas}
+											selectedStepId={selectedStepId}
+											pendingChanges={pendingChanges}
+											onSaveSuccess={handleExitEditMode}
+											onDiscard={handleExitEditMode}
+											onRemoveStepChange={removeStepChange}
+											onRemoveNewItem={removeNewItem}
+											onStepHover={setHighlightedStepId}
+											allSteps={currentWorkflow.workflow.steps}
+											allTransitions={currentWorkflow.workflow.transitions}
+											onInfoFieldChange={recordFieldChange}
+											onParametersChange={(step, params) => {
+												recordFieldChange(step, "parameters", params as any);
+											}}
+											onAddConnection={addNewConnection}
+											onRemoveConnection={recordConnectionRemoval}
+											onUndoRemoveConnection={undoConnectionRemoval}
+											isSidebarVisible={sidebarVisible}
+											onToggleSidebar={() => setSidebarVisible((v) => !v)}
+											onEdit={() => enterEditMode()}
+											onClone={() => setShowCloneModal(true)}
+											onConvertSuccess={(migrationFileName) => {
+												console.info("Migration created:", migrationFileName);
+											}}
+										/>
+									)}
+								</div>
 							</Box>
-						)}
+						) : null}
 					</>
 				)}
 			</Box>

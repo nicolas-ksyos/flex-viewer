@@ -48,7 +48,9 @@ export interface CanvasPaneProps {
 		field: keyof EditableStepFields,
 		value: string | number | boolean | null,
 	) => void;
-	// Toolbar action callbacks:
+	onBlockClick?: (step: ParsedWorkflowStep | null) => void;
+	selectedStepId?: string | null;
+	// Toolbar action callbacks (kept for legacy — toolbar no longer shows these buttons):
 	onEdit?: () => void;
 	onClone?: () => void;
 	isEditMode?: boolean;
@@ -104,11 +106,10 @@ export function CanvasPane({
 	mode,
 	pendingChanges = [],
 	highlightedStepId,
+	selectedStepId,
+	onBlockClick,
 	onBlockMove,
 	onInfoFieldChange,
-	onEdit,
-	onClone,
-	isEditMode,
 	onAddBlock,
 	onAddConnection,
 	onAddTransition,
@@ -312,9 +313,6 @@ export function CanvasPane({
 				onFitToScreen={handleFitToScreen}
 				showLegend={showLegend}
 				onToggleLegend={() => setShowLegend((v) => !v)}
-				onEdit={onEdit}
-				onClone={onClone}
-				isEditMode={isEditMode}
 			/>
 
 			{/* Creation toolbar — shown in edit mode when all three callbacks provided */}
@@ -376,6 +374,8 @@ export function CanvasPane({
 						pendingChanges={pendingChanges}
 						readOnly={mode === "view"}
 						highlightedStepId={highlightedStepId}
+						selectedStepId={selectedStepId}
+						onBlockClick={onBlockClick}
 						zoomLevel={zoom}
 						onBlockMove={
 							mode === "edit" && onBlockMove ? onBlockMove : noopBlockMove

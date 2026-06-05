@@ -43,91 +43,16 @@ export function patchSeedFile(
 		const change = changes.find((c) => c.stepName === nameProp);
 		if (!change) return;
 
-		// ── Special case: 'parameters' object replacement ────────────────────
-		// Handle before the scalar field loop because the whole object literal
-		// node must be replaced, not just a single primitive value.
-		if (change.fields.parameters !== undefined) {
-			const paramProp = obj.properties.find(
-				(p) =>
-					ts.isPropertyAssignment(p) &&
-					ts.isIdentifier(p.name) &&
-					p.name.text === "parameters",
-			) as ts.PropertyAssignment | undefined;
+		// Regenerate the entire object argument from scratch using canonical
+		// field ordering and formatting rules instead of patching individual
+		// properties — avoids formatting drift across multiple saves.
+		const newObjText = regenerateStepObject(obj, source, sourceFile, change);
 
-			const newParamsText = formatParametersValue(change.fields.parameters);
-
-			if (paramProp) {
-				// Replace the existing initializer (the whole object/null expression)
-				replacements.push({
-					start: paramProp.initializer.getStart(sourceFile),
-					end: paramProp.initializer.getEnd(),
-					newText: newParamsText,
-				});
-			} else {
-				// Insert as a new property after the last existing property
-				const lastProp = obj.properties[obj.properties.length - 1];
-				const insertPos = lastProp
-					? lastProp.getEnd()
-					: obj.getStart(sourceFile) + 1;
-				const indent = detectIndent(source, obj);
-				replacements.push({
-					start: insertPos,
-					end: insertPos,
-					newText: `,\n${indent}parameters: ${newParamsText}`,
-				});
-			}
-		}
-
-		// ── Scalar field loop ────────────────────────────────────────────────
-		for (const [field, value] of Object.entries(change.fields) as [
-			keyof EditableStepFields,
-			unknown,
-		][]) {
-			if (value === undefined) continue;
-			// parameters already handled above
-			if (field === "parameters") continue;
-
-			const existing = obj.properties.find(
-				(p) =>
-					ts.isPropertyAssignment(p) &&
-					ts.isIdentifier(p.name) &&
-					p.name.text === field,
-			) as ts.PropertyAssignment | undefined;
-
-			const newText = formatPropertyValue(value);
-
-			if (existing) {
-				// Only replace StringLiteral, NumericLiteral, or NullKeyword nodes —
-				// skip template literals and other complex expressions.
-				const init = existing.initializer;
-				const replaceable =
-					ts.isStringLiteral(init) ||
-					ts.isNumericLiteral(init) ||
-					init.kind === ts.SyntaxKind.NullKeyword ||
-					init.kind === ts.SyntaxKind.TrueKeyword ||
-					init.kind === ts.SyntaxKind.FalseKeyword;
-
-				if (replaceable) {
-					replacements.push({
-						start: init.getStart(sourceFile),
-						end: init.getEnd(),
-						newText,
-					});
-				}
-			} else {
-				// Insert new property after the last property
-				const lastProp = obj.properties[obj.properties.length - 1];
-				const insertPos = lastProp
-					? lastProp.getEnd()
-					: obj.getStart(sourceFile) + 1;
-				const indent = detectIndent(source, obj);
-				replacements.push({
-					start: insertPos,
-					end: insertPos,
-					newText: `,\n${indent}${field}: ${newText}`,
-				});
-			}
-		}
+		replacements.push({
+			start: obj.getStart(sourceFile),
+			end: obj.getEnd(),
+			newText: newObjText,
+		});
 	}
 
 	function findStringProp(
@@ -161,6 +86,129 @@ export function patchSeedFile(
 	}
 
 	fs.writeFileSync(filePath, result, "utf-8");
+}
+
+// ─────────────────────────────────────────────────────────────
+// Whole-object regeneration
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Canonical property order for createStep() objects.
+ * Properties not in this list (rare extras) are appended at the end.
+ */
+const CANONICAL_ORDER = [
+	"activities",
+	"block",
+	"id",
+	"name",
+	"label",
+	"type",
+	"allowedPerformer",
+	"nextSteps",
+	"synchronousNextSteps",
+	"parameters",
+	"performerNeedsTask",
+	"x",
+	"y",
+] as const;
+
+/**
+ * Properties whose values are complex expressions (member access, identifiers,
+ * call expressions, array literals containing identifiers, etc.) that must
+ * be preserved verbatim from the original source.  They are never regenerated
+ * from change.fields even if a change is present for them.
+ */
+const ALWAYS_VERBATIM = new Set([
+	"activities",
+	"block",
+	"id",
+	"nextSteps",
+	"synchronousNextSteps",
+]);
+
+const CANONICAL_SET = new Set<string>(CANONICAL_ORDER);
+
+/**
+ * Regenerates the entire `createStep({...})` object argument from scratch,
+ * merging the original properties with the pending change.
+ *
+ * - Properties in ALWAYS_VERBATIM are always copied verbatim from the source.
+ * - Properties in change.fields (and not verbatim) are replaced with formatted values.
+ * - All other existing properties are copied verbatim.
+ * - Property order follows CANONICAL_ORDER; extra properties are appended.
+ */
+function regenerateStepObject(
+	obj: ts.ObjectLiteralExpression,
+	source: string,
+	sourceFile: ts.SourceFile,
+	change: StepPendingChange,
+): string {
+	const propIndent = detectIndent(source, obj);
+	// Outer indent: one 4-space level up from property indent
+	const outerIndent = propIndent.length >= 4 ? propIndent.slice(4) : "";
+
+	// Build a map of existing property assignments
+	const existingProps = new Map<string, ts.PropertyAssignment>();
+	for (const p of obj.properties) {
+		if (ts.isPropertyAssignment(p) && ts.isIdentifier(p.name)) {
+			existingProps.set(p.name.text, p);
+		}
+	}
+
+	// Collect extra properties not in canonical order (to append at end)
+	const extraLines: string[] = [];
+	for (const p of obj.properties) {
+		if (ts.isPropertyAssignment(p) && ts.isIdentifier(p.name)) {
+			if (!CANONICAL_SET.has(p.name.text)) {
+				const text = source.slice(p.getStart(sourceFile), p.getEnd());
+				extraLines.push(`${propIndent}${text},`);
+			}
+		}
+	}
+
+	const changedFields = change.fields as Record<string, unknown>;
+	const lines: string[] = [];
+
+	for (const propName of CANONICAL_ORDER) {
+		const changedValue = changedFields[propName];
+		const hasChange = changedValue !== undefined;
+		const existing = existingProps.get(propName);
+
+		if (ALWAYS_VERBATIM.has(propName)) {
+			// Always copy verbatim if present; ignore any change value
+			if (existing) {
+				const text = source.slice(
+					existing.getStart(sourceFile),
+					existing.getEnd(),
+				);
+				lines.push(`${propIndent}${text},`);
+			}
+		} else if (hasChange) {
+			// Use the new formatted value
+			const formatted =
+				propName === "parameters"
+					? formatParametersValue(
+							changedValue as Record<string, unknown> | null,
+						)
+					: formatPropertyValue(changedValue);
+			lines.push(`${propIndent}${propName}: ${formatted},`);
+		} else if (existing) {
+			// Copy verbatim from source (preserves complex original values)
+			const text = source.slice(
+				existing.getStart(sourceFile),
+				existing.getEnd(),
+			);
+			lines.push(`${propIndent}${text},`);
+		}
+		// else: not present and no change → omit
+	}
+
+	// Append extra properties
+	for (const extraLine of extraLines) {
+		lines.push(extraLine);
+	}
+
+	return `{\n${lines.join("\n")}\n${outerIndent}}`;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -229,9 +277,9 @@ function formatAnyValue(v: unknown, depth: number): string {
 }
 
 function detectIndent(source: string, obj: ts.ObjectLiteralExpression): string {
-	if (obj.properties.length === 0) return "    ";
+	if (obj.properties.length === 0) return "        ";
 	const firstPropStart = obj.properties[0].getFullStart();
 	const lineStart = source.lastIndexOf("\n", firstPropStart) + 1;
 	const match = source.slice(lineStart).match(/^(\s+)/);
-	return match ? match[1] : "    ";
+	return match ? match[1] : "        ";
 }

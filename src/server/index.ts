@@ -5,6 +5,7 @@ import http from "node:http";
 import configRoutes from "./routes/configRoutes.js";
 import seedRoutes from "./routes/seedRoutes.js";
 import blockParameterRoutes from "./routes/blockParameterRoutes.js";
+import migrationRoutes from "./routes/migrationRoutes.js";
 import { readConfig } from "./config.js";
 import { startWatching, stopWatching } from "./fileWatcher.js";
 import type { WsMessage } from "../shared/types.js";
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use("/api", configRoutes);
 app.use("/api", seedRoutes);
 app.use("/api", blockParameterRoutes);
+app.use("/api", migrationRoutes);
 
 app.post("/api/watch", (req, res) => {
 	const { seedFileName } = req.body;

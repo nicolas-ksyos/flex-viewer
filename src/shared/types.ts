@@ -302,3 +302,20 @@ export interface SeedPatchResponse {
 	success: boolean;
 	error?: string;
 }
+
+/** Body sent to POST /api/migrations/convert */
+export interface MigrationConvertRequest {
+	seedFileName: string;
+	/** Override the auto-detected migration number, e.g. "0140" */
+	migrationNumber?: string;
+	/** Override the derived migration name, e.g. "optometry-flex" */
+	migrationName?: string;
+}
+
+/** Response from POST /api/migrations/convert */
+export interface MigrationConvertResponse {
+	success: boolean;
+	/** The name of the created migration file, e.g. "0140-optometry-flex.ts" */
+	migrationFileName?: string;
+	error?: string;
+}
