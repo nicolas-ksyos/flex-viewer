@@ -191,6 +191,8 @@ export interface EditableWorkflowCanvasProps {
     step: ParsedWorkflowStep,
     params: Record<string, unknown> | null,
   ) => void;
+  panX: number;
+  panY: number;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1107,6 +1109,8 @@ export function EditableWorkflowCanvas({
   onUndoDeleteBlock,
   onRemoveConnection,
   onUndoRemoveConnection: _onUndoRemoveConnection,
+  panX,
+  panY,
 }: EditableWorkflowCanvasProps) {
   const zoom = zoomLevel ?? 1;
 
@@ -1202,8 +1206,8 @@ export function EditableWorkflowCanvas({
     e: React.MouseEvent,
     step: ParsedWorkflowStep,
   ) => {
-    if (readOnly) return;
-    e.preventDefault();
+    if (readOnly || connectionDrag) return;
+    // e.preventDefault();
     e.stopPropagation(); // prevent canvas-pan handler from firing on block clicks
     const { pixelX, pixelY } = effectivePosition(
       step,
@@ -1222,16 +1226,27 @@ export function EditableWorkflowCanvas({
     console.log("down", dragState);
   };
 
+  const onBlockMoveRef = useRef(onBlockMove);
+  useEffect(() => {
+    onBlockMoveRef.current = onBlockMove;
+  }, [onBlockMove]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) =>
+      console.log("global mouseup fired", e.target);
+    window.addEventListener("mouseup", handler);
+    return () => window.removeEventListener("mouseup", handler);
+  }, []);
   // Global mouse listeners — attached only while dragging.
   // Mouse deltas arrive in screen pixels; dividing by zoom converts them
   // to canvas pixels (the coordinate space blocks live in).
   useEffect(() => {
-    console.log("effect", dragState);
     if (!dragState) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const dx = (e.clientX - dragState.startMouseX) / zoom;
-      const dy = (e.clientY - dragState.startMouseY) / zoom;
+      const dx = (e.clientX - dragState.startMouseX) * zoom;
+      const dy = (e.clientY - dragState.startMouseY) * zoom;
+      console.log("move dx/dy", dx, dy, "zoom", zoom);
       setDragPixel({
         x: dragState.startPixelX + dx,
         y: dragState.startPixelY + dy,
@@ -1255,7 +1270,7 @@ export function EditableWorkflowCanvas({
         Math.round((newPixelY - BLOCK_OFFSET_Y) / CELL_HEIGHT),
       );
 
-      onBlockMove(dragState.stepId, newGridX, newGridY);
+      onBlockMoveRef.current(dragState.stepId, newGridX, newGridY);
       setDragState(null);
       setDragPixel(null);
     };
@@ -1266,7 +1281,7 @@ export function EditableWorkflowCanvas({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [dragState, onBlockMove, zoom]);
+  }, [dragState, zoom]);
 
   // ── Connection-drag mouse handlers ─────────────────────────
 
@@ -1275,7 +1290,7 @@ export function EditableWorkflowCanvas({
     step: ParsedWorkflowStep,
     side: "top" | "bottom" | "left" | "right",
   ) => {
-    if (readOnly) return;
+    if (readOnly || dragState) return;
     e.stopPropagation();
     e.preventDefault();
     const { pixelX, pixelY } = effectivePosition(
@@ -1323,8 +1338,8 @@ export function EditableWorkflowCanvas({
     const handleMouseMove = (e: MouseEvent) => {
       const rect = el?.getBoundingClientRect();
       if (!rect) return;
-      const canvasX = (e.clientX - rect.left) / zoom;
-      const canvasY = (e.clientY - rect.top) / zoom;
+      const canvasX = (e.clientX - panX) / zoom;
+      const canvasY = (e.clientY - panY) / zoom;
       // Use refs so we always hit-test against the latest step positions
       // without needing to restart the effect on every pendingChanges change.
       const targetStep = workflowStepsRef.current.find((s) => {
