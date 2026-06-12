@@ -127,18 +127,6 @@ interface ConnectionDragState {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Block-drag state
-// ─────────────────────────────────────────────────────────────
-
-interface DragState {
-  stepId: string;
-  startMouseX: number;
-  startMouseY: number;
-  startPixelX: number;
-  startPixelY: number;
-}
-
-// ─────────────────────────────────────────────────────────────
 // Component props
 // ─────────────────────────────────────────────────────────────
 
@@ -191,8 +179,6 @@ export interface EditableWorkflowCanvasProps {
     step: ParsedWorkflowStep,
     params: Record<string, unknown> | null,
   ) => void;
-  panX: number;
-  panY: number;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -303,6 +289,8 @@ interface WorkflowBlockProps {
   onMouseLeave: () => void;
   /** True when this block is selected (click-selected) */
   isSelected: boolean;
+  /** True when this block is the current drop target during a connection drag */
+  isConnectionDropTarget: boolean;
   /** Called when this block is clicked (not dragged) */
   onBlockClick?: () => void;
   /** Called when trash icon is clicked (mark for deletion) */
@@ -326,6 +314,7 @@ function WorkflowBlock({
   isDeleted,
   isImpacted,
   isSelected,
+  isConnectionDropTarget,
   readOnly,
   onMouseDown,
   onMouseEnter,
@@ -739,11 +728,13 @@ function WorkflowBlock({
             border: `${styles.borderWidth}px ${step.isNew ? "dashed" : "solid"} ${styles.border}`,
             boxShadow: isDragging
               ? "0 8px 24px rgba(0,0,0,0.18)"
-              : isSelected
-                ? "0 0 0 2px #3b82f6, 0 0 0 5px rgba(59,130,246,0.18)"
-                : isHighlighted
-                  ? "0 0 0 3px rgba(59,130,246,0.35), 0 1px 4px rgba(0,0,0,0.08)"
-                  : "0 1px 4px rgba(0,0,0,0.08)",
+              : isConnectionDropTarget
+                ? "0 0 0 3px #22c55e, 0 0 10px rgba(34,197,94,0.45)"
+                : isSelected
+                  ? "0 0 0 2px #3b82f6, 0 0 0 5px rgba(59,130,246,0.18)"
+                  : isHighlighted
+                    ? "0 0 0 3px rgba(59,130,246,0.35), 0 1px 4px rgba(0,0,0,0.08)"
+                    : "0 1px 4px rgba(0,0,0,0.08)",
           }}
         />
         {newBadge}
@@ -765,11 +756,13 @@ function WorkflowBlock({
   if (styles.shape === "diamond") {
     const shadowFilter = isDragging
       ? "drop-shadow(0 8px 24px rgba(0,0,0,0.18))"
-      : isSelected
-        ? "drop-shadow(0 0 4px rgba(59,130,246,0.8))"
-        : isHighlighted
-          ? "drop-shadow(0 0 4px rgba(59,130,246,0.6))"
-          : "drop-shadow(0 1px 3px rgba(0,0,0,0.10))";
+      : isConnectionDropTarget
+        ? "drop-shadow(0 0 6px rgba(34,197,94,0.9))"
+        : isSelected
+          ? "drop-shadow(0 0 4px rgba(59,130,246,0.8))"
+          : isHighlighted
+            ? "drop-shadow(0 0 4px rgba(59,130,246,0.6))"
+            : "drop-shadow(0 1px 3px rgba(0,0,0,0.10))";
     // Inset polygon points by half stroke-width so the stroke is fully visible
     const b = styles.borderWidth / 2;
     const w = BLOCK_WIDTH;
@@ -819,11 +812,13 @@ function WorkflowBlock({
           border: `${styles.borderWidth}px ${step.isNew ? "dashed" : "solid"} ${styles.border}`,
           boxShadow: isDragging
             ? "0 8px 24px rgba(0,0,0,0.18)"
-            : isSelected
-              ? "0 0 0 2px #3b82f6, 0 0 0 5px rgba(59,130,246,0.18)"
-              : isHighlighted
-                ? "0 0 0 3px rgba(59,130,246,0.35), 0 1px 4px rgba(0,0,0,0.08)"
-                : "0 1px 4px rgba(0,0,0,0.08)",
+            : isConnectionDropTarget
+              ? "0 0 0 3px #22c55e, 0 0 10px rgba(34,197,94,0.45)"
+              : isSelected
+                ? "0 0 0 2px #3b82f6, 0 0 0 5px rgba(59,130,246,0.18)"
+                : isHighlighted
+                  ? "0 0 0 3px rgba(59,130,246,0.35), 0 1px 4px rgba(0,0,0,0.08)"
+                  : "0 1px 4px rgba(0,0,0,0.08)",
         }}
       />
       {newBadge}
@@ -1109,8 +1104,6 @@ export function EditableWorkflowCanvas({
   onUndoDeleteBlock,
   onRemoveConnection,
   onUndoRemoveConnection: _onUndoRemoveConnection,
-  panX,
-  panY,
 }: EditableWorkflowCanvasProps) {
   const zoom = zoomLevel ?? 1;
 
@@ -1166,8 +1159,12 @@ export function EditableWorkflowCanvas({
     [pendingChanges],
   );
 
-  // ── Internal drag state ───────────────────────────────────
-  const [dragState, setDragState] = useState<DragState | null>(null);
+  // ── Block-drag rendering state ────────────────────────────
+  // activeDragStepId / dragPixel are only set after the movement threshold
+  // (≥ 4 px screen pixels) is crossed.  All gesture tracking lives in
+  // closure variables inside handleBlockMouseDown so there is no async
+  // effect re-mount gap between "drag started" and "listeners live".
+  const [activeDragStepId, setActiveDragStepId] = useState<string | null>(null);
   const [dragPixel, setDragPixel] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -1180,9 +1177,8 @@ export function EditableWorkflowCanvas({
     toStepId: string;
   } | null>(null);
 
-  // Refs used inside the connection-drag effect so we always read
-  // the latest value without restarting the effect on every change.
-  const hoverTargetIdRef = useRef<string | null>(null);
+  // Refs for latest workflow data — used inside drag-handler closures so
+  // hit-tests always see current step positions without restarting effects.
   const workflowStepsRef = useRef(workflow.steps);
   const pendingChangesRef = useRef(pendingChanges);
   useEffect(() => {
@@ -1192,8 +1188,14 @@ export function EditableWorkflowCanvas({
     pendingChangesRef.current = pendingChanges;
   }, [pendingChanges]);
 
-  // Ref on the canvas div for hit-test coordinate conversion
+  // Ref on the canvas div — used to convert client → canvas-local coords.
   const canvasInnerRef = useRef<HTMLDivElement>(null);
+
+  // Kept in sync so drag closures always divide by the current zoom value.
+  const zoomRef = useRef(zoom);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   // Ref for canvas background click detection
   const canvasMouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -1201,90 +1203,87 @@ export function EditableWorkflowCanvas({
   // ── Hover state ──────────────────────────────────────
   const [hoveredStepId, setHoveredStepId] = useState<string | null>(null);
 
-  // Start dragging a block
+  const onBlockMoveRef = useRef(onBlockMove);
+  useEffect(() => {
+    onBlockMoveRef.current = onBlockMove;
+  }, [onBlockMove]);
+
+  // ── Block drag ────────────────────────────────────────────
+  // Listeners are attached synchronously in the mousedown handler so there
+  // is no async re-render gap between "gesture started" and "listeners live".
   const handleBlockMouseDown = (
     e: React.MouseEvent,
     step: ParsedWorkflowStep,
   ) => {
     if (readOnly || connectionDrag) return;
-    // e.preventDefault();
-    e.stopPropagation(); // prevent canvas-pan handler from firing on block clicks
+    e.stopPropagation();
+
     const { pixelX, pixelY } = effectivePosition(
       step,
       pendingChanges,
       null,
       null,
     );
-    setDragState({
-      stepId: step.id,
-      startMouseX: e.clientX,
-      startMouseY: e.clientY,
-      startPixelX: pixelX,
-      startPixelY: pixelY,
-    });
-    setDragPixel({ x: pixelX, y: pixelY });
-  };
+    const startMouseX = e.clientX;
+    const startMouseY = e.clientY;
+    const startPixelX = pixelX;
+    const startPixelY = pixelY;
+    const stepId = step.id;
+    // Closure variable — no React state needed to track threshold.
+    let crossed = false;
 
-  const onBlockMoveRef = useRef(onBlockMove);
-  useEffect(() => {
-    onBlockMoveRef.current = onBlockMove;
-  }, [onBlockMove]);
-
-  // Global mouse listeners — attached only while dragging.
-  // Mouse deltas arrive in screen pixels; dividing by zoom converts them
-  // to canvas pixels (the coordinate space blocks live in).
-  useEffect(() => {
-    if (!dragState) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const dx = (e.clientX - dragState.startMouseX) / zoom;
-      const dy = (e.clientY - dragState.startMouseY) / zoom;
-      console.log("move dx/dy", dx, dy, "zoom", zoom);
+    const handleMouseMove = (me: MouseEvent) => {
+      const dxScreen = me.clientX - startMouseX;
+      const dyScreen = me.clientY - startMouseY;
+      if (!crossed) {
+        if (Math.sqrt(dxScreen * dxScreen + dyScreen * dyScreen) < 4) return;
+        crossed = true;
+        setActiveDragStepId(stepId);
+      }
+      const z = zoomRef.current;
       setDragPixel({
-        x: dragState.startPixelX + dx,
-        y: dragState.startPixelY + dy,
+        x: startPixelX + dxScreen / z,
+        y: startPixelY + dyScreen / z,
       });
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
-      const dx = (e.clientX - dragState.startMouseX) / zoom;
-      const dy = (e.clientY - dragState.startMouseY) / zoom;
-      const newPixelX = dragState.startPixelX + dx;
-      const newPixelY = dragState.startPixelY + dy;
-
-      // Snap to nearest integer grid cell, clamped to >= 0
-      const newGridX = Math.max(
-        0,
-        Math.round((newPixelX - BLOCK_OFFSET_X) / CELL_WIDTH),
-      );
-      const newGridY = Math.max(
-        0,
-        Math.round((newPixelY - BLOCK_OFFSET_Y) / CELL_HEIGHT),
-      );
-
-      onBlockMoveRef.current(dragState.stepId, newGridX, newGridY);
-      setDragState(null);
+    const handleMouseUp = (me: MouseEvent) => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      if (crossed) {
+        const z = zoomRef.current;
+        const newPixelX = startPixelX + (me.clientX - startMouseX) / z;
+        const newPixelY = startPixelY + (me.clientY - startMouseY) / z;
+        const newGridX = Math.max(
+          0,
+          Math.round((newPixelX - BLOCK_OFFSET_X) / CELL_WIDTH),
+        );
+        const newGridY = Math.max(
+          0,
+          Math.round((newPixelY - BLOCK_OFFSET_Y) / CELL_HEIGHT),
+        );
+        onBlockMoveRef.current(stepId, newGridX, newGridY);
+      }
+      setActiveDragStepId(null);
       setDragPixel(null);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [dragState, zoom]);
+  };
 
-  // ── Connection-drag mouse handlers ─────────────────────────
-
+  // ── Connection drag ───────────────────────────────────────
+  // Same pattern: listeners attached immediately so a quick mousedown+up
+  // sequence never misses the mouseup event.
   const handleConnectionHandleMouseDown = (
     e: React.MouseEvent,
     step: ParsedWorkflowStep,
     side: "top" | "bottom" | "left" | "right",
   ) => {
-    if (readOnly || dragState) return;
+    if (readOnly || activeDragStepId !== null) return;
     e.stopPropagation();
     e.preventDefault();
+
     const { pixelX, pixelY } = effectivePosition(
       step,
       pendingChanges,
@@ -1295,98 +1294,73 @@ export function EditableWorkflowCanvas({
     const cy = pixelY + BLOCK_HEIGHT / 2;
     let startX = cx;
     let startY = cy;
-    if (side === "right") {
-      startX = pixelX + BLOCK_WIDTH;
-      startY = cy;
-    }
-    if (side === "left") {
-      startX = pixelX;
-      startY = cy;
-    }
-    if (side === "top") {
-      startX = cx;
-      startY = pixelY;
-    }
-    if (side === "bottom") {
-      startX = cx;
-      startY = pixelY + BLOCK_HEIGHT;
-    }
+    if (side === "right") { startX = pixelX + BLOCK_WIDTH; startY = cy; }
+    if (side === "left")  { startX = pixelX;                startY = cy; }
+    if (side === "top")   { startX = cx;                    startY = pixelY; }
+    if (side === "bottom"){ startX = cx;                    startY = pixelY + BLOCK_HEIGHT; }
+
+    const fromStepId = step.id;
+    // Closure variable — updated synchronously in mousemove, read in mouseup.
+    let lastHoverTargetId: string | null = null;
+
     setConnectionDrag({
-      fromStepId: step.id,
+      fromStepId,
       fromPixelX: startX,
       fromPixelY: startY,
       currentX: startX,
       currentY: startY,
       hoverTargetId: null,
     });
-  };
 
-  useEffect(() => {
-    if (!connectionDrag) return;
-    const el = canvasInnerRef.current;
-    // Reset the hover-target ref whenever a new drag starts
-    hoverTargetIdRef.current = null;
-
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMouseMove = (me: MouseEvent) => {
+      const el = canvasInnerRef.current;
       const rect = el?.getBoundingClientRect();
       if (!rect) return;
-      const canvasX = (e.clientX - panX) / zoom;
-      const canvasY = (e.clientY - panY) / zoom;
-      // Use refs so we always hit-test against the latest step positions
-      // without needing to restart the effect on every pendingChanges change.
+      const z = zoomRef.current;
+      const canvasX = (me.clientX - rect.left) / z;
+      const canvasY = (me.clientY - rect.top) / z;
+
       const targetStep = workflowStepsRef.current.find((s) => {
-        const { pixelX, pixelY } = effectivePosition(
+        const { pixelX: sx, pixelY: sy } = effectivePosition(
           s,
           pendingChangesRef.current,
           null,
           null,
         );
         return (
-          canvasX >= pixelX &&
-          canvasX <= pixelX + BLOCK_WIDTH &&
-          canvasY >= pixelY &&
-          canvasY <= pixelY + BLOCK_HEIGHT &&
-          s.id !== connectionDrag.fromStepId
+          canvasX >= sx &&
+          canvasX <= sx + BLOCK_WIDTH &&
+          canvasY >= sy &&
+          canvasY <= sy + BLOCK_HEIGHT &&
+          s.id !== fromStepId
         );
       });
-      // Update ref synchronously — handleMouseUp reads this, not the async state
-      hoverTargetIdRef.current = targetStep?.id ?? null;
+
+      lastHoverTargetId = targetStep?.id ?? null;
       setConnectionDrag((prev) =>
         prev
           ? {
               ...prev,
               currentX: canvasX,
               currentY: canvasY,
-              hoverTargetId: targetStep?.id ?? null,
+              hoverTargetId: lastHoverTargetId,
             }
           : null,
       );
     };
 
     const handleMouseUp = () => {
-      // Read from ref, not from the stale connectionDrag closure value.
-      // The closure captures connectionDrag at effect-setup time when
-      // hoverTargetId is always null; the ref is updated synchronously
-      // inside handleMouseMove so it always holds the latest target.
-      const targetId = hoverTargetIdRef.current;
-      if (targetId) {
-        setPendingConnectionDraft({
-          fromStepId: connectionDrag.fromStepId,
-          toStepId: targetId,
-        });
-      }
-      hoverTargetIdRef.current = null;
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
       setConnectionDrag(null);
+      if (lastHoverTargetId) {
+        setPendingConnectionDraft({ fromStepId, toStepId: lastHoverTargetId });
+      }
     };
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionDrag?.fromStepId, zoom]);
+  };
 
   if (workflow.steps.length === 0) {
     return (
@@ -1397,11 +1371,9 @@ export function EditableWorkflowCanvas({
   }
 
   // ── Compute effective pixel positions for every step ──────
-  const activeDraggingStepId = dragState?.stepId ?? null;
-
   const stepPositions = workflow.steps.map((step) => ({
     step,
-    ...effectivePosition(step, pendingChanges, activeDraggingStepId, dragPixel),
+    ...effectivePosition(step, pendingChanges, activeDragStepId, dragPixel),
   }));
 
   // ── Canvas dimensions (enough to show all blocks + 2 cell padding) ──
@@ -1444,7 +1416,7 @@ export function EditableWorkflowCanvas({
     centerMap.set(step.id, { cx, cy, shape: styles.shape, halfW, halfH });
   }
 
-  const isDraggingAny = dragState !== null;
+  const isDraggingAny = activeDragStepId !== null;
 
   // Canvas renders at its natural pixel size; zoom is applied by the
   // App-level wrapper (spacer + CSS scale) so scrollbars are always correct.
@@ -1497,12 +1469,13 @@ export function EditableWorkflowCanvas({
             step={step}
             pixelX={pixelX}
             pixelY={pixelY}
-            isDragging={activeDraggingStepId === step.id}
+            isDragging={activeDragStepId === step.id}
             isHovered={hoveredStepId === step.id}
             isHighlighted={highlightedStepId === step.id}
             isDeleted={deletedStepIds.has(step.id)}
             isImpacted={impactedStepIds.has(step.id)}
             isSelected={selectedStepId === step.id}
+            isConnectionDropTarget={connectionDrag?.hoverTargetId === step.id}
             readOnly={readOnly}
             onMouseDown={(e) => handleBlockMouseDown(e, step)}
             onMouseEnter={() => setHoveredStepId(step.id)}
@@ -1606,13 +1579,16 @@ export function EditableWorkflowCanvas({
                   null,
                 );
                 return (
-                  <circle
-                    cx={tx + BLOCK_WIDTH / 2}
-                    cy={ty + BLOCK_HEIGHT / 2}
-                    r={8}
+                  <rect
+                    x={tx - 5}
+                    y={ty - 5}
+                    width={BLOCK_WIDTH + 10}
+                    height={BLOCK_HEIGHT + 10}
+                    rx={8}
                     fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
+                    stroke="#22c55e"
+                    strokeWidth={2.5}
+                    strokeDasharray="7 3"
                   />
                 );
               })()}

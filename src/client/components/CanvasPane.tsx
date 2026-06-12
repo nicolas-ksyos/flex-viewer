@@ -400,8 +400,6 @@ export function CanvasPane({
             onUndoRemoveConnection={
               mode === "edit" ? onUndoRemoveConnection : undefined
             }
-            panX={panX}
-            panY={panY}
           />
         </div>
       </div>
