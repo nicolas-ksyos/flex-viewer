@@ -1223,7 +1223,6 @@ export function EditableWorkflowCanvas({
       startPixelY: pixelY,
     });
     setDragPixel({ x: pixelX, y: pixelY });
-    console.log("down", dragState);
   };
 
   const onBlockMoveRef = useRef(onBlockMove);
@@ -1231,12 +1230,6 @@ export function EditableWorkflowCanvas({
     onBlockMoveRef.current = onBlockMove;
   }, [onBlockMove]);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) =>
-      console.log("global mouseup fired", e.target);
-    window.addEventListener("mouseup", handler);
-    return () => window.removeEventListener("mouseup", handler);
-  }, []);
   // Global mouse listeners — attached only while dragging.
   // Mouse deltas arrive in screen pixels; dividing by zoom converts them
   // to canvas pixels (the coordinate space blocks live in).
@@ -1244,8 +1237,8 @@ export function EditableWorkflowCanvas({
     if (!dragState) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const dx = (e.clientX - dragState.startMouseX) * zoom;
-      const dy = (e.clientY - dragState.startMouseY) * zoom;
+      const dx = (e.clientX - dragState.startMouseX) / zoom;
+      const dy = (e.clientY - dragState.startMouseY) / zoom;
       console.log("move dx/dy", dx, dy, "zoom", zoom);
       setDragPixel({
         x: dragState.startPixelX + dx,
@@ -1258,7 +1251,6 @@ export function EditableWorkflowCanvas({
       const dy = (e.clientY - dragState.startMouseY) / zoom;
       const newPixelX = dragState.startPixelX + dx;
       const newPixelY = dragState.startPixelY + dy;
-      console.log("mouseUP");
 
       // Snap to nearest integer grid cell, clamped to >= 0
       const newGridX = Math.max(
