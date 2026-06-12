@@ -337,9 +337,14 @@ function WorkflowBlock({
     }
   };
 
-  // Mouseup: detect click (small movement) vs drag
+  // Mouseup: detect click (small movement) vs drag.
+  // NOTE: do NOT call e.stopPropagation() here. React 17+ attaches its
+  // listener to the root container; stopPropagation also calls the native
+  // event's stopPropagation, which would silently kill the event before it
+  // reaches our window.addEventListener("mouseup", ...) drag/connection
+  // handlers. The canvas background onMouseUp already guards itself with an
+  // e.target check so no unwanted deselect fires.
   const handleMouseUp = (e: React.MouseEvent) => {
-    e.stopPropagation();
     if (mouseDownPosRef.current) {
       const dx = e.clientX - mouseDownPosRef.current.x;
       const dy = e.clientY - mouseDownPosRef.current.y;
